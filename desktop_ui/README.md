@@ -17,6 +17,23 @@ From the repository root in PowerShell:
 The launcher starts the local API if port 8765 is free. After backend source
 changes, restart the existing JARVIS API process before running the desktop app.
 
+The launcher uses a project-local `.pub-cache/`, resolves the committed lockfile
+before building, and fixes both the shell and native working directory to
+`desktop_ui/`. This avoids depending on a missing or inconsistent shared
+`AppData/Local/Pub/Cache` when compiling. The first launch downloads dependencies;
+later launches reuse this cache. The shared Pub cache and Flutter SDK are untouched,
+and the caller's `PUB_CACHE` and working directory are restored on exit.
+
+To verify dependencies and the Windows build without launching an app or API:
+
+```powershell
+.\run-desktop.ps1 -BuildOnly
+```
+
+When running Flutter commands manually, use the same cache (`$env:PUB_CACHE =
+"C:\Users\ongzh\JARVIS\.pub-cache"`) before `flutter pub get`, or use the launcher
+again to regenerate package resolution for its isolated cache.
+
 ## Live monitoring
 
 - CPU and physical memory readings, plus NVIDIA GPU utilization, VRAM and
