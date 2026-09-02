@@ -210,6 +210,23 @@ Example:
 
 should not be allowed to expose files outside the registered project.
 
+### Open Interpreter Routing
+
+Open Interpreter is an optional execution backend for complex local workflows
+that are not covered by JARVIS native tools. JARVIS keeps routing and safety
+policy in `services/task_router.py`.
+
+Current routing modes:
+
+- `manual`: Open Interpreter runs only when the user explicitly requests it.
+- `ask`: JARVIS requests confirmation before non-explicit delegation.
+- `automatic`: low-risk read-only tasks may run directly; medium-risk and
+  high-risk tasks require confirmation.
+
+Open Interpreter always requires an explicit existing subdirectory as its
+workspace. Current directories, drive roots, and missing directories are
+rejected. Pending requests can be confirmed or cancelled before execution.
+
 ### Development Auto-Reload
 
 JARVIS includes a development workflow using `watchfiles`.
@@ -300,7 +317,12 @@ JARVIS_Local_AI/
 ├── services/
 │   ├── __init__.py
 │   ├── app_registry.py
-│   └── project_registry.py
+│   ├── notification_service.py
+│   ├── project_registry.py
+│   ├── task_manager.py
+│   ├── task_router.py
+│   └── agents/
+│       └── open_interpreter.py
 │
 ├── skills/
 │   ├── files.py
@@ -607,61 +629,280 @@ It is not yet intended to provide unrestricted autonomous control of a computer.
 
 ---
 
-## Roadmap
+## Product Master Plan
 
-### Developer Agent
+This section describes the intended product direction. A feature marked
+**Planned** is not available yet. Existing features remain deliberately
+conservative while the broader permission system is built.
 
-- [ ] Git diff
-- [ ] Automated project tests
-- [ ] Project diagnostics
-- [ ] Permission layer
-- [ ] Safe file creation
-- [ ] Safe code modification
-- [ ] Code review tools
-- [ ] Test-and-fix agent loop
-- [ ] Git commit approval workflow
-- [ ] Git push approval workflow
+### Product Vision
 
-### Voice
+JARVIS is intended to become a local-first personal Windows AI assistant:
+not only a chatbot, but a system that can understand a request, select a safe
+executor, observe the result, continue when appropriate, and notify the user.
 
-- [ ] Wake word detection
-- [ ] "Jarvis" voice wake
-- [ ] Built-in microphone support
-- [ ] Speech-to-text
-- [ ] Text-to-speech
-- [ ] Continuous conversation mode
+~~~text
+User
+ ↓
+Understand intent
+ ↓
+Choose tool or agent
+ ↓
+Check policy and permission
+ ↓
+Execute
+ ↓
+Observe result
+ ↓
+Notify user
+~~~
 
-### Memory
+### Product Architecture
 
-- [ ] SQLite memory
-- [ ] Recent project memory
-- [ ] Task history
-- [ ] User preferences
-- [ ] Long-term memory retrieval
+~~~text
+                         JARVIS
+                            │
+          ┌─────────────────┼──────────────────┐
+          │                 │                  │
+   Voice Interface     JARVIS Brain       Desktop UI
+          │                 │                  │
+    Wake word / STT     Intent / Router      Settings
+          │                 │                  │
+          └──────────── TaskRouter ───────────┘
+                            │
+        ┌───────────────────┼───────────────────┐
+        ▼                   ▼                   ▼
+   Native Tools         Local AI          Specialist Agents
+   Windows / APIs       Ollama / Qwen     Open Interpreter / Codex
+                            │
+                      Permission Layer
+                            │
+                      Task Execution
+                            │
+                  Monitor and Notification
+~~~
 
-### Vision
+**Implemented foundation:** local Qwen through Ollama, a text conversation
+loop, native tools, TaskRouter, TaskManager, terminal notifications, and Open
+Interpreter routing safeguards.
 
-- [ ] Screenshot capture
-- [ ] Screenshot understanding
-- [ ] Visual error analysis
-- [ ] UI debugging
+**Planned:** voice, desktop UI, settings, local API, browser control, hardware
+integrations, and optional cloud-model providers.
 
-### Interface
+### Brain, Models, and Executors
 
-- [ ] Desktop UI
-- [ ] Liquid Glass interface
-- [ ] System status dashboard
-- [ ] Voice activity indicator
-- [ ] Device management
+The JARVIS Brain interprets user intent. It does not receive unrestricted
+system access; Python policy decides what is actually allowed.
 
-### Cross-Platform
+| Component | Role | Current status |
+| --- | --- | --- |
+| Local Qwen via Ollama | Conversation, intent understanding, simple reasoning, and tool selection. | Implemented; default model is qwen3:8b. |
+| Native JARVIS tools | Small supported actions such as opening apps, reading system information, project inspection, Git status, and read-only file access. | Implemented. |
+| Open Interpreter | General local workflows and multi-file execution beyond native-tool coverage. | Implemented with explicit workspace validation, risk classification, and manual / ask / automatic modes. |
+| Codex or another cloud provider | Heavy software-engineering work such as repository-wide debugging, refactoring, and implementation/test loops. | Planned and optional. |
+| Future specialist agents | Clearly scoped capabilities such as browser or hardware control. | Planned. |
 
-- [ ] Android
-- [ ] iOS
-- [ ] macOS
-- [ ] Linux
-- [ ] Web interface
-- [ ] Multi-device communication
+Intended model routing:
+
+~~~text
+Simple or normal work        → Local Qwen + Native tools
+General local workflows      → Open Interpreter when policy allows
+Heavy coding work            → Optional Codex or another specialist
+~~~
+
+Normal usage should remain local-first. Cloud models are an optional
+enhancement, not a requirement.
+
+### Computer, Application, Browser, and Project Control
+
+Application control is planned in three levels:
+
+1. **Native/direct control** — predictable actions through Windows or supported
+   APIs, such as opening an application, reading system status, or controlling
+   volume.
+2. **Generic computer control** — a controlled agent can operate an interface
+   when no dedicated integration exists.
+3. **Dedicated integration** — high-value integrations, for example browser,
+   Spotify, Windows, or supported hardware APIs.
+
+**Implemented foundation:** Start Menu application discovery, app opening,
+project discovery from configured roots, registered-project information,
+opening projects in VS Code, Git status, and read-only project file tools.
+
+**Planned:** closing applications, volume/media controls, browser automation,
+project test execution, Git diff, diagnostics, safe file changes, and
+dedicated hardware integrations. Hardware support must use a documented vendor
+API, CLI, or supported controller; Open Interpreter alone does not create
+hardware support.
+
+### Voice, Desktop UI, and Settings
+
+**Planned voice flow:**
+
+~~~text
+Microphone
+ ↓
+Wake word: Jarvis
+ ↓
+Speech-to-text
+ ↓
+JARVIS Brain and TaskRouter
+ ↓
+Execution
+ ↓
+Text-to-speech
+~~~
+
+A wake word should begin a short conversation session so the user can make
+follow-up requests without repeating it. The planned stack includes
+openWakeWord, voice activity detection, faster-whisper, and Piper or Kokoro.
+
+**Planned desktop experience:**
+
+- Desktop UI, system tray, background lifecycle controls, and notifications.
+- Settings for model/provider, microphone, wake word, conversation timeout,
+  project roots, application scan roots, routing mode, and agent settings.
+- Desktop orb/pet, status dashboard, Liquid Glass visual language, and
+  accessible reduced-motion behavior.
+
+Users should configure these options in the UI rather than editing model or
+scan-path constants in source code.
+
+### Permission and Security Model
+
+JARVIS must enforce policy before an executor starts. A prompt or model
+decision is never the final security boundary.
+
+~~~text
+User request
+ ↓
+Risk classification
+ ↓
+Permission check
+ ↓
+Allowed?
+ ├── No  → reject or offer a restricted safe action
+ └── Yes → Native tool / Open Interpreter / future agent
+~~~
+
+The planned trust model has four levels:
+
+| Level | Condition | Intended permissions |
+| --- | --- | --- |
+| 0 — Locked | Windows device is locked. | Very limited low-risk actions; no private data or privileged work. |
+| 1 — Restricted | Device unlocked but speaker is not verified. | General questions and selected low-risk actions only. |
+| 2 — Trusted | Authorized Windows session and verified voice, where voice is enabled. | Broader private/project access, still subject to policy. |
+| 3 — Critical confirmation | A destructive, privileged, external, or state-changing action is requested. | Explicit confirmation is required for that specific action. |
+
+Voice verification is an additional trust signal, never the only authorization
+factor for destructive or privileged operations.
+
+**Implemented safeguards:** explicit Open Interpreter workspace requirements;
+manual, ask, and automatic routing modes; LOW / MEDIUM / HIGH risk
+classification; and confirmation for medium/high-risk automatic work.
+
+**Planned safeguards:** the full locked/restricted/trusted state model,
+credential protection, file-write permissions, terminal/PowerShell policy,
+Git commit/push approval, and external-message approval.
+
+### Task Lifecycle and Notifications
+
+A task should be tracked rather than simply launched and forgotten.
+
+~~~text
+QUEUED → RUNNING → OBSERVING → COMPLETED
+                    ↓
+                  FAILED
+~~~
+
+Complex agents may retry a bounded, safe recovery loop before reporting a
+failure.
+
+**Implemented foundation:** managed Open Interpreter tasks track creation,
+start, completion, duration, result, and error; terminal notifications report
+completion or failure.
+
+**Planned:** observation/retry policy, task history, Windows notifications,
+desktop UI notifications, and voice notifications.
+
+### Local API
+
+**Planned:** a FastAPI local API will keep the desktop UI separate from JARVIS
+internal modules.
+
+~~~text
+Desktop UI
+ ↓
+FastAPI Local API
+ ↓
+JARVIS Core
+ ↓
+TaskRouter
+ ↓
+Tools / Models / Agents
+~~~
+
+Likely local endpoints include task, status, apps, projects, settings, and
+model. The API must preserve the same policy checks as the CLI; it must not
+become a bypass around TaskRouter.
+
+### Delivery Phases
+
+#### Phase 0 — Current Foundation
+
+- [x] Ollama + qwen3:8b, agent tool loop, and native application/system tools.
+- [x] Project discovery, project registry, Git status, and read-only project
+  file tools.
+- [x] Open Interpreter adapter, workspace validation, risk routing, pending
+  confirmation, task lifecycle records, terminal notification, and TaskRouter
+  extraction.
+
+#### Phase 1 — Safe Developer Workflow
+
+- [ ] Git diff and project diagnostics.
+- [ ] Run tests for registered projects and report results.
+- [ ] Safe file creation and code modification with confirmation.
+- [ ] Code review and bounded test-and-fix workflows.
+- [ ] Explicit Git commit and Git push approval flows.
+- [ ] Optional Codex adapter for heavy coding tasks.
+
+#### Phase 2 — Full Permission Boundary
+
+- [ ] Locked, restricted, and trusted modes.
+- [ ] Critical-action confirmation for deletion, installations, admin actions,
+  system settings, credentials, and external communications.
+- [ ] Explicit terminal, PowerShell, browser, and file-write policies.
+
+#### Phase 3 — Local API and Desktop Product
+
+- [ ] FastAPI local API.
+- [ ] Desktop settings, system tray, lifecycle controls, and status dashboard.
+- [ ] Windows notifications and accessible visual design.
+
+#### Phase 4 — Voice and Multimodal Interaction
+
+- [ ] Wake word, microphone input, STT, TTS, and conversation sessions.
+- [ ] Screenshot capture, screenshot understanding, and visual error analysis.
+- [ ] Voice verification as an additional trust signal.
+
+#### Phase 5 — Expansion
+
+- [ ] Local SQLite task history, project context, and user preferences.
+- [ ] Browser and dedicated application integrations.
+- [ ] Supported hardware integrations.
+- [ ] Evaluate web, mobile, macOS, Linux, and multi-device support after the
+  Windows local-first workflow is stable.
+
+### Non-Negotiable Engineering Rules
+
+- Do not expose unrestricted shell, PowerShell, or administrator access to a
+  language model.
+- Prefer native tools whenever they safely support the request.
+- Keep policy in Python and route all new agents through TaskRouter.
+- Validate paths, workspaces, and tool arguments before execution.
+- Require confirmation for destructive, privileged, external, or
+  state-changing actions.
+- Keep local AI as the default path whenever practical.
 
 ---
 

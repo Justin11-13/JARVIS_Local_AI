@@ -1,10 +1,9 @@
-from pathlib import Path
-
 from ollama import chat
 
 from services.agents.open_interpreter import OpenInterpreterAdapter
 from services.notification_service import NotificationService
 from services.task_manager import TaskManager
+from services.task_router import TaskRouter
 from skills.files import list_files, read_file, search_files
 from skills.git import git_status
 from skills.project import (
@@ -30,8 +29,12 @@ OPEN_INTERPRETER_ROUTING_MODE = "automatic"
 open_interpreter = OpenInterpreterAdapter()
 task_manager = TaskManager()
 notification_service = NotificationService()
-
-pending_open_interpreter_request = None
+task_router = TaskRouter(
+    routing_mode=OPEN_INTERPRETER_ROUTING_MODE,
+    open_interpreter=open_interpreter,
+    task_manager=task_manager,
+    notification_service=notification_service,
+)
 
 
 # ============================================================
@@ -315,349 +318,6 @@ Important:
 
 
 # ============================================================
-# Open Interpreter Validation
-# ============================================================
-
-
-def validate_open_interpreter_workspace(
-    workspace: str,
-) -> tuple[Path | None, str | None]:
-    workspace = workspace.strip()
-
-    if not workspace:
-        return None, "Open Interpreter workspace is missing."
-
-    if workspace in {"/", "\\", "."}:
-        return (
-            None,
-            "Open Interpreter requires an explicit workspace directory.",
-        )
-
-    try:
-        workspace_path = Path(workspace).expanduser().resolve()
-
-    except OSError as error:
-        return None, f"Invalid workspace: {error}"
-
-    if not workspace_path.exists():
-        return (
-            None,
-            f"Workspace does not exist: {workspace_path}",
-        )
-
-    if not workspace_path.is_dir():
-        return (
-            None,
-            f"Workspace is not a directory: {workspace_path}",
-        )
-
-    # Prevent C:\, D:\, etc.
-    if workspace_path == Path(workspace_path.anchor):
-        return (
-            None,
-            "Open Interpreter cannot use an entire drive as its workspace.",
-        )
-
-    return workspace_path, None
-
-
-# ============================================================
-# Open Interpreter Risk Classification
-# ============================================================
-
-
-def classify_open_interpreter_risk(
-    task: str,
-) -> str:
-    normalized_task = task.lower()
-
-    # ========================================================
-    # High Risk
-    # ========================================================
-
-    high_risk_keywords = {
-        "删除",
-        "delete",
-        "remove",
-        "erase",
-        "wipe",
-        "清空",
-        "格式化",
-        "format disk",
-        "管理员",
-        "administrator",
-        "admin privilege",
-        "registry",
-        "注册表",
-        "shutdown",
-        "关机",
-        "重启电脑",
-        "restart computer",
-        "reboot",
-        "powershell as admin",
-        "system configuration",
-        "系统设置",
-    }
-
-    if any(keyword in normalized_task for keyword in high_risk_keywords):
-        return "high"
-
-    # ========================================================
-    # Explicit Read-Only / No Modification
-    # ========================================================
-
-    read_only_phrases = {
-        "不要修改",
-        "不要编辑",
-        "不要创建",
-        "不要写入",
-        "不要移动",
-        "不要重命名",
-        "不要更改",
-        "不要改变",
-        "只读",
-        "仅读取",
-        "仅分析",
-        "只分析",
-        "不要做任何修改",
-        "不要修改任何东西",
-        "不要修改任何内容",
-        "do not modify",
-        "don't modify",
-        "do not edit",
-        "don't edit",
-        "do not write",
-        "read only",
-        "read-only",
-        "do not change",
-        "don't change",
-        "do not create",
-    }
-
-    explicitly_read_only = any(
-        phrase in normalized_task for phrase in read_only_phrases
-    )
-
-    if explicitly_read_only:
-        return "low"
-
-    # ========================================================
-    # Medium Risk
-    # ========================================================
-
-    medium_risk_keywords = {
-        "修改",
-        "编辑",
-        "modify",
-        "edit",
-        "rename",
-        "重命名",
-        "move",
-        "移动",
-        "create",
-        "创建",
-        "write",
-        "写入",
-        "replace",
-        "替换",
-        "install",
-        "安装",
-        "update file",
-        "更新文件",
-        "copy",
-        "复制",
-    }
-
-    if any(keyword in normalized_task for keyword in medium_risk_keywords):
-        return "medium"
-
-    return "low"
-
-
-# ============================================================
-# Open Interpreter Confirmation Request
-# ============================================================
-
-
-def request_open_interpreter(
-    task: str,
-    workspace: str,
-) -> dict:
-    global pending_open_interpreter_request
-
-    if OPEN_INTERPRETER_ROUTING_MODE == "manual":
-        return {
-            "success": False,
-            "status": "manual_mode",
-            "error": (
-                "Open Interpreter is in manual mode. "
-                "It can only be used when the user explicitly requests it."
-            ),
-        }
-
-    task = task.strip()
-
-    if not task:
-        return {
-            "success": False,
-            "status": "validation_failed",
-            "error": "Open Interpreter task is missing.",
-        }
-
-    workspace_path, validation_error = validate_open_interpreter_workspace(workspace)
-
-    if validation_error:
-        return {
-            "success": False,
-            "status": "validation_failed",
-            "error": validation_error,
-        }
-
-    risk = classify_open_interpreter_risk(task)
-
-    pending_open_interpreter_request = {
-        "task": task,
-        "workspace": str(workspace_path),
-        "risk": risk,
-    }
-
-    return {
-        "success": True,
-        "status": "awaiting_confirmation",
-        "task": task,
-        "workspace": str(workspace_path),
-        "risk": risk,
-        "message": (
-            f"这个 Open Interpreter 任务风险等级为 {risk.upper()}。"
-            "是否继续？请回复 yes 或 no。"
-        ),
-    }
-
-
-# ============================================================
-# Open Interpreter Execution
-# ============================================================
-
-
-def delegate_to_open_interpreter(
-    task: str,
-    workspace: str,
-) -> dict:
-    task = task.strip()
-
-    if not task:
-        return {
-            "task": None,
-            "result": "",
-            "success": False,
-            "status": "validation_failed",
-            "error": "Open Interpreter task is missing.",
-            "notification": "",
-        }
-
-    workspace_path, validation_error = validate_open_interpreter_workspace(workspace)
-
-    if validation_error:
-        return {
-            "task": None,
-            "result": "",
-            "success": False,
-            "status": "validation_failed",
-            "error": validation_error,
-            "notification": "",
-        }
-
-    risk = classify_open_interpreter_risk(task)
-
-    # --------------------------------------------------------
-    # Create Managed Task
-    # --------------------------------------------------------
-
-    managed_task = task_manager.create_task(
-        title=task[:80],
-        agent="open_interpreter",
-    )
-
-    task_manager.start_task(managed_task.id)
-
-    # --------------------------------------------------------
-    # Execute Open Interpreter
-    # --------------------------------------------------------
-
-    result = open_interpreter.run_task(
-        task=task,
-        workspace=str(workspace_path),
-        skip_git_repo_check=True,
-    )
-
-    # --------------------------------------------------------
-    # Update Task Manager
-    # --------------------------------------------------------
-
-    if result.get("success"):
-        task_manager.complete_task(
-            managed_task.id,
-            result=result.get(
-                "result",
-                "",
-            ),
-        )
-
-    else:
-        task_manager.fail_task(
-            managed_task.id,
-            error=result.get(
-                "error",
-                "Unknown Open Interpreter error.",
-            ),
-        )
-
-    task_info = task_manager.get_task(managed_task.id)
-
-    # --------------------------------------------------------
-    # Notification
-    # --------------------------------------------------------
-
-    notification = notification_service.notify_task_status(
-        status=result.get(
-            "status",
-            "failed",
-        ),
-        title=task,
-        result=result.get(
-            "result",
-            "",
-        ),
-        error=result.get(
-            "error",
-            "",
-        ),
-    )
-
-    return {
-        "task": task_info,
-        "risk": risk,
-        "result": result.get(
-            "result",
-            "",
-        ),
-        "success": result.get(
-            "success",
-            False,
-        ),
-        "status": result.get(
-            "status",
-            "failed",
-        ),
-        "error": result.get(
-            "error",
-            "",
-        ),
-        "notification": notification,
-    }
-
-
-# ============================================================
 # Tool Registry
 # ============================================================
 
@@ -672,8 +332,6 @@ AVAILABLE_TOOLS = {
     "read_file": read_file,
     "search_files": search_files,
     "refresh_project_registry": refresh_project_registry,
-    "request_open_interpreter": request_open_interpreter,
-    "delegate_to_open_interpreter": delegate_to_open_interpreter,
 }
 
 
@@ -769,200 +427,6 @@ TOOLS = [
 
 
 # ============================================================
-# Routing Helpers
-# ============================================================
-
-
-def user_explicitly_requested_open_interpreter(
-    user_input: str,
-) -> bool:
-    normalized_input = user_input.strip().lower()
-
-    open_interpreter_keywords = {
-        "open interpreter",
-        "用open interpreter",
-        "用 open interpreter",
-        "使用open interpreter",
-        "使用 open interpreter",
-        "交给open interpreter",
-        "交给 open interpreter",
-        "让open interpreter",
-        "让 open interpreter",
-    }
-
-    return any(keyword in normalized_input for keyword in open_interpreter_keywords)
-
-
-def user_explicitly_requested_project_scan(
-    user_input: str,
-) -> bool:
-    normalized_input = user_input.strip().lower()
-
-    project_scan_keywords = {
-        "扫描项目",
-        "扫描我的项目",
-        "扫描开发项目",
-        "找项目",
-        "查找项目",
-        "发现项目",
-        "刷新项目",
-        "重新扫描项目",
-        "refresh project",
-        "refresh projects",
-        "scan project",
-        "scan projects",
-        "discover project",
-        "discover projects",
-        "find project",
-        "find projects",
-    }
-
-    return any(keyword in normalized_input for keyword in project_scan_keywords)
-
-
-# ============================================================
-# Tool Execution
-# ============================================================
-
-
-def execute_tool(
-    tool_call,
-    user_input: str,
-):
-    function_name = tool_call.function.name
-    arguments = tool_call.function.arguments
-
-    # ========================================================
-    # Open Interpreter Request Guard
-    # ========================================================
-
-    if function_name == "request_open_interpreter":
-        task = arguments.get(
-            "task",
-            "",
-        )
-
-        workspace = arguments.get(
-            "workspace",
-            "",
-        )
-
-    risk = classify_open_interpreter_risk(task)
-
-    # ----------------------------------------------------
-    # Manual Mode
-    # ----------------------------------------------------
-
-    if OPEN_INTERPRETER_ROUTING_MODE == "manual":
-        return {
-            "success": False,
-            "status": "manual_mode",
-            "error": (
-                "Open Interpreter routing is set to manual. "
-                "The user must explicitly request Open Interpreter."
-            ),
-        }
-
-    # ----------------------------------------------------
-    # Automatic Mode + LOW Risk
-    # ----------------------------------------------------
-
-    if OPEN_INTERPRETER_ROUTING_MODE == "automatic" and risk == "low":
-        return delegate_to_open_interpreter(
-            task=task,
-            workspace=workspace,
-        )
-    # ========================================================
-    # Open Interpreter Delegate Guard
-    # ========================================================
-
-    if function_name == "delegate_to_open_interpreter":
-        explicitly_requested = user_explicitly_requested_open_interpreter(user_input)
-
-        task = arguments.get(
-            "task",
-            "",
-        )
-
-        workspace = arguments.get(
-            "workspace",
-            "",
-        )
-
-        risk = classify_open_interpreter_risk(task)
-
-        # ----------------------------------------------------
-        # Manual Mode
-        # ----------------------------------------------------
-
-        if OPEN_INTERPRETER_ROUTING_MODE == "manual" and not explicitly_requested:
-            return {
-                "success": False,
-                "status": "routing_blocked",
-                "error": (
-                    "Open Interpreter is in manual mode. "
-                    "The user did not explicitly request Open Interpreter."
-                ),
-            }
-
-        # ----------------------------------------------------
-        # Ask Mode
-        # ----------------------------------------------------
-
-        if OPEN_INTERPRETER_ROUTING_MODE == "ask" and not explicitly_requested:
-            return request_open_interpreter(
-                task=task,
-                workspace=workspace,
-            )
-
-        # ----------------------------------------------------
-        # Automatic Mode
-        # ----------------------------------------------------
-
-        if OPEN_INTERPRETER_ROUTING_MODE == "automatic" and risk in {
-            "medium",
-            "high",
-        }:
-            return request_open_interpreter(
-                task=task,
-                workspace=workspace,
-            )
-
-    # ========================================================
-    # Project Registry Guard
-    # ========================================================
-
-    if function_name == "refresh_project_registry":
-        if not user_explicitly_requested_project_scan(user_input):
-            return {
-                "success": False,
-                "status": "routing_blocked",
-                "error": (
-                    "refresh_project_registry can only be used when "
-                    "the user explicitly asks to scan, discover, "
-                    "refresh, or find projects."
-                ),
-            }
-
-    # ========================================================
-    # Execute Tool
-    # ========================================================
-
-    function_to_call = AVAILABLE_TOOLS.get(function_name)
-
-    print(f"\n[JARVIS Tool] {function_name}({arguments})")
-
-    if not function_to_call:
-        return f"Tool '{function_name}' is not available."
-
-    try:
-        return function_to_call(**arguments)
-
-    except Exception as error:
-        return f"Tool '{function_name}' failed: {error}"
-
-
-# ============================================================
 # Tool Result Display
 # ============================================================
 
@@ -1008,87 +472,40 @@ def display_tool_result(
         )
 
 
-# ============================================================
-# Pending Open Interpreter Confirmation
-# ============================================================
-
-
-def handle_pending_open_interpreter_confirmation(
+def execute_routed_tool(
+    tool_call,
     user_input: str,
 ):
-    global pending_open_interpreter_request
+    function_name = tool_call.function.name
+    arguments = tool_call.function.arguments
 
-    if not pending_open_interpreter_request:
+    print(f"\n[JARVIS Tool] {function_name}({arguments})")
+
+    return task_router.execute_tool(
+        function_name=function_name,
+        arguments=arguments,
+        user_input=user_input,
+        available_tools=AVAILABLE_TOOLS,
+    )
+
+
+def handle_router_confirmation(
+    user_input: str,
+):
+    handled, message, result = (
+        task_router.handle_pending_open_interpreter_confirmation(user_input)
+    )
+
+    if not handled:
         return False
 
-    normalized_input = user_input.strip().lower()
+    if message:
+        print(f"\nJARVIS > {message}")
 
-    yes_answers = {
-        "yes",
-        "y",
-        "继续",
-        "可以",
-        "确认",
-        "同意",
-        "好",
-        "好的",
-        "ok",
-        "okay",
-    }
-
-    no_answers = {
-        "no",
-        "n",
-        "不要",
-        "取消",
-        "不同意",
-        "不用",
-        "算了",
-    }
-
-    # --------------------------------------------------------
-    # Confirm
-    # --------------------------------------------------------
-
-    if normalized_input in yes_answers:
-        pending_request = pending_open_interpreter_request
-
-        pending_open_interpreter_request = None
-
-        print("\nJARVIS > 已确认，正在交给 Open Interpreter 执行。")
-
-        result = delegate_to_open_interpreter(
-            task=pending_request["task"],
-            workspace=pending_request["workspace"],
-        )
-
+    if result:
         display_tool_result(result)
-
         final_result = result.get("result") or result.get("error") or "任务已结束。"
-
-        print(
-            "\nJARVIS >",
-            final_result,
-        )
-
-        return True
-
-    # --------------------------------------------------------
-    # Reject
-    # --------------------------------------------------------
-
-    if normalized_input in no_answers:
-        pending_open_interpreter_request = None
-
-        print("\nJARVIS > 已取消 Open Interpreter 任务。")
-
-        return True
-
-    # --------------------------------------------------------
-    # Invalid Confirmation
-    # --------------------------------------------------------
-
-    print("\nJARVIS > 目前有一个 Open Interpreter 任务等待确认。请回复 yes 或 no。")
+        print(f"\nJARVIS > {final_result}")
 
     return True
 
@@ -1136,7 +553,7 @@ def run_jarvis():
         # Pending OI Confirmation
         # ----------------------------------------------------
 
-        if handle_pending_open_interpreter_confirmation(user_input):
+        if handle_router_confirmation(user_input):
             continue
 
         # ----------------------------------------------------
@@ -1183,7 +600,7 @@ def run_jarvis():
                 # --------------------------------------------
 
                 for tool_call in tool_calls:
-                    result = execute_tool(
+                    result = execute_routed_tool(
                         tool_call,
                         user_input,
                     )
