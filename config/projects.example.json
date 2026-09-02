@@ -1,0 +1,9 @@
+{
+  "projects": {
+    "Example Project": {
+      "path": "C:\\path\\to\\your\\project",
+      "framework": "Laravel",
+      "description": "Example registered project"
+    }
+  }
+}

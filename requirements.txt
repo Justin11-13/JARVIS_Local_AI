@@ -1,0 +1,4 @@
+ollama
+psutil
+pydantic
+python-dotenv
