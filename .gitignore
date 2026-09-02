@@ -1,39 +1,103 @@
+# =========================
 # Python
+# =========================
+
 __pycache__/
 *.py[cod]
+*.pyo
 *.pyd
 
+# Python cache / tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# =========================
 # Virtual environments
+# =========================
+
 .venv/
 venv/
+env/
+ENV/
 
-# Secrets
+# =========================
+# Environment / secrets
+# =========================
+
 .env
 .env.*
 !.env.example
 
-# Local JARVIS configuration
-config/projects.json
-config/apps.json
+*.pem
+*.key
 
-# Databases / memory
+# =========================
+# JARVIS local configuration
+# =========================
+
+config/apps.json
+config/projects.json
+config/project_roots.json
+
+# Keep public example configs
+!config/apps.example.json
+!config/projects.example.json
+!config/project_roots.example.json
+
+# =========================
+# Local databases / memory
+# =========================
+
 *.db
 *.sqlite
 *.sqlite3
 
-# IDE
-.vscode/
-.idea/
+# =========================
+# Local AI models
+# =========================
 
-# OS
-Thumbs.db
-.DS_Store
-
-# Logs
-*.log
-
-# Models
 models/
+.models/
+
 *.gguf
 *.safetensors
 *.bin
+
+# =========================
+# Logs / temporary files
+# =========================
+
+*.log
+
+tmp/
+temp/
+
+*.tmp
+*.bak
+*.swp
+
+# =========================
+# VS Code / IDE
+# =========================
+
+.vscode/
+.idea/
+
+# =========================
+# Operating system
+# =========================
+
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# =========================
+# Build / distribution
+# =========================
+
+build/
+dist/
+*.egg-info/

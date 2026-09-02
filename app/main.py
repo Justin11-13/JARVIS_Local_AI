@@ -8,14 +8,17 @@ from skills.files import (
 from skills.git import (
     git_status,
 )
-from skills.project import (
-    get_project_info,
-    list_projects,
-    open_project,
-)
+
 from skills.system import (
     get_system_info,
     open_app,
+)
+
+from skills.project import (
+    list_projects,
+    get_project_info,
+    open_project,
+    refresh_project_registry,
 )
 
 MODEL = "qwen3:8b"
@@ -46,6 +49,8 @@ Rules:
 - Use search_files when the user asks to find code, text, classes, functions, routes, models, or keywords inside a project.
 - File tools are read-only. Do not claim to modify files.
 - When referring to the root folder of a project, use "." as relative_path, not "/" or an absolute path.
+- Use refresh_project_registry when the user asks JARVIS to scan, discover, refresh, or find local development projects.
+- Project discovery only scans configured project roots.
 """
 
 
@@ -59,6 +64,7 @@ AVAILABLE_TOOLS = {
     "list_files": list_files,
     "read_file": read_file,
     "search_files": search_files,
+    "refresh_project_registry": refresh_project_registry,
 }
 
 
@@ -72,6 +78,7 @@ TOOLS = [
     list_files,
     read_file,
     search_files,
+    refresh_project_registry,
 ]
 
 
