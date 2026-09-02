@@ -101,3 +101,6 @@ Desktop.ini
 build/
 dist/
 *.egg-info/
+
+AGENTS.md
+PROJECT_SCOPE.md
