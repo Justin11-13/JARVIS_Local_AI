@@ -93,6 +93,7 @@ temp/
 Thumbs.db
 Desktop.ini
 .DS_Store
+.finesse/
 
 # =========================
 # Build / distribution

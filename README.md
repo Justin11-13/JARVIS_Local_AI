@@ -389,6 +389,23 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
 python -m pip install -r requirements.txt
 ```
 
+### Windows desktop app (Flutter)
+
+The preferred desktop UI is the Flutter Windows application in `desktop_ui/`.
+It connects to the existing JARVIS Core for chat and tools, with live CPU, memory
+and NVIDIA GPU monitoring plus a session-only error log.
+
+```powershell
+.\run-desktop.ps1
+```
+
+The Flutter client connects to the local-only FastAPI service at
+`127.0.0.1:8765`, which reuses JARVIS Core's existing model loop, tools, and
+`TaskRouter`. The UI therefore cannot bypass the existing safety boundary.
+
+The older `ui.desktop_app` Tkinter prototype remains only as a reference while
+the Flutter application is developed.
+
 ### 5. Install Ollama
 
 Install Ollama for Windows.
