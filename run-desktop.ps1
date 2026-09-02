@@ -1,9 +1,10 @@
-param([switch]$BuildOnly)
+param([switch]$BuildOnly, [switch]$Release)
 
 $Python = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
 $Flutter = "C:\Flutter-3.44.9\flutter\bin\flutter.bat"
 $DesktopUi = Join-Path $PSScriptRoot "desktop_ui"
 $DesktopPubCache = Join-Path $PSScriptRoot ".pub-cache"
+$BuildMode = if ($Release) { "--release" } else { "--debug" }
 
 if (-not $BuildOnly -and -not (Test-Path -LiteralPath $Python)) {
     Write-Host "JARVIS virtual environment was not found."
@@ -35,7 +36,7 @@ try {
     }
 
     if ($BuildOnly) {
-        & $Flutter build windows --debug --no-pub
+        & $Flutter build windows $BuildMode --no-pub
     } else {
         $ExistingApi = Get-NetTCPConnection -LocalAddress "127.0.0.1" -LocalPort 8765 -State Listen -ErrorAction SilentlyContinue
         if (-not $ExistingApi) {
@@ -43,7 +44,7 @@ try {
             Start-Sleep -Seconds 1
         }
         # Use exactly the package configuration generated above.
-        & $Flutter run -d windows --no-pub
+        & $Flutter run -d windows $BuildMode --no-pub
     }
     $DesktopExitCode = $LASTEXITCODE
 } catch {

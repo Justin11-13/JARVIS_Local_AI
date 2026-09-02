@@ -5,6 +5,32 @@ instrument-style shell shares its typography, colors and components through
 `lib/console_theme.dart`. There are no image downloads, web views or blur layers.
 The state indicator only animates while a chat request is outstanding.
 
+## Desktop shortcut
+
+One-time setup from the repository root:
+
+```powershell
+.\run-desktop.ps1 -BuildOnly -Release
+.\create-desktop-shortcut.ps1
+```
+
+Double-click **JARVIS** on the Windows desktop. The shortcut uses the virtual
+environment's `pythonw.exe` to launch the compiled Release app without a terminal,
+dependency downloads or recompilation. It reuses a healthy local API, or starts
+one on `127.0.0.1:8765` and waits up to 30 seconds for readiness before opening
+the window. It does not start Ollama; keep your existing Ollama setup running.
+Startup failures show a dialog; local launcher/API diagnostics are appended to
+`tmp/desktop-startup.log` (ignored by Git).
+
+The API stays in the background after the app closes, as with the development
+launcher. This does not add Windows startup/login behavior or a keyboard hotkey.
+Each activation opens an app window. Keep the repository and its build folder
+in place; this shortcut is not a standalone installer.
+
+After changing Flutter code, close the Release app and rerun
+`.\run-desktop.ps1 -BuildOnly -Release`. The desktop shortcut then uses the updated
+build; it does not need to be recreated unless the repository moves.
+
 ## Run
 
 From the repository root in PowerShell:
