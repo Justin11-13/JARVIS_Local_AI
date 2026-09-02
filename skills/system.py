@@ -4,52 +4,91 @@ import subprocess
 import psutil
 
 
+import os
+import subprocess
+
+import psutil
+
+from services.app_registry import (
+    find_app,
+    refresh_registry,
+)
+
+
 def open_app(app: str) -> str:
     """
-    Open a supported application on Windows.
+    Open an installed Windows application.
+
+    The application is discovered automatically from the
+    Windows Start Menu application registry.
 
     Args:
         app: Name of the application to open.
 
     Returns:
-        Result message.
+        Result of the operation.
     """
 
-    normalized = app.lower().strip()
+    match = find_app(app)
 
-    if normalized in [
-        "vscode",
-        "vs code",
-        "visual studio code",
-        "code",
-    ]:
-        command = shutil.which("code")
+    # 第一次找不到就重新扫描
+    if not match:
+        refresh_registry()
+        match = find_app(app)
 
-        if command:
-            subprocess.Popen([command])
-            return "Visual Studio Code opened successfully."
-
-        vscode_path = os.path.expandvars(
-            r"%LOCALAPPDATA%\Programs\Microsoft VS Code\Code.exe"
+    if not match:
+        return (
+            f"Application '{app}' "
+            "could not be found."
         )
 
-        if os.path.exists(vscode_path):
-            subprocess.Popen([vscode_path])
-            return "Visual Studio Code opened successfully."
+    shortcut = match.get(
+        "shortcut"
+    )
 
-        return "Visual Studio Code was not found."
+    name = match.get(
+        "name",
+        app,
+    )
 
-    return f"Application '{app}' is not supported yet."
+    if not shortcut:
+        return (
+            f"Application '{name}' "
+            "does not have a launch shortcut."
+        )
+
+    if not os.path.exists(shortcut):
+        return (
+            f"Shortcut for '{name}' "
+            "does not exist."
+        )
+
+    try:
+        os.startfile(shortcut)
+
+        return (
+            f"{name} opened successfully."
+        )
+
+    except OSError as error:
+        return (
+            f"Failed to open '{name}': "
+            f"{error}"
+        )
+
 
 def get_system_info() -> str:
     """
-    Get the current Windows computer CPU and memory usage.
+    Get current CPU and memory usage.
 
     Returns:
         Current CPU and RAM usage.
     """
 
-    cpu = psutil.cpu_percent(interval=0.5)
+    cpu = psutil.cpu_percent(
+        interval=0.5
+    )
+
     memory = psutil.virtual_memory()
 
     return (

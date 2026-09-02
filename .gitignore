@@ -14,6 +14,7 @@ venv/
 
 # Local JARVIS configuration
 config/projects.json
+config/apps.json
 
 # Databases / memory
 *.db
