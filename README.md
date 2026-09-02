@@ -1,14 +1,69 @@
 # JARVIS Local AI Assistant
 
-JARVIS is an open-source, local-first AI assistant designed to run on your own computer.
+JARVIS is an open-source, local-first Windows AI assistant with a native Flutter
+desktop app, local models through Ollama, and policy-controlled tools.
 
-It uses local AI models through Ollama and provides controlled tools for interacting with Windows applications, development projects, Git repositories, and project files.
+Chat in Chinese or English, open Windows applications, inspect your development
+projects, and watch live CPU, memory, and NVIDIA GPU readings in one workspace.
+Once built, launch it from a desktop icon without opening a terminal or
+recompiling the app.
 
-The project follows a tool-based architecture so the AI model does not receive unrestricted operating-system access.
+The default model is **qwen3:8b**. The normal local workflow does not require a
+paid cloud-model API. Open Interpreter is an optional executor; Python routing
+policy, not the model's prompt alone, governs tool execution.
+
+**Status:** working Windows desktop foundation, under active development.
+Voice, wake word, a desktop companion, and persistent history are not implemented.
+
+[Screenshots](#desktop-preview) · [Installation](#installation) ·
+[Features](#current-features) · [Security](#security-model) ·
+[Master plan](#product-master-plan) · [Desktop guide](desktop_ui/README.md)
+
+## Desktop Preview
+
+### Assistant workspace
+
+Chat with JARVIS, review tool results, and keep live system readings alongside
+the conversation. The compact composer grows as you type.
+
+![JARVIS Assistant page with a Chinese conversation and live CPU, memory, and NVIDIA GPU monitoring](docs/screenshots/assistant-workspace.png)
+
+### Device dashboard
+
+CPU and memory history, NVIDIA GPU utilization, VRAM, temperature, and local API
+status. Desktop capabilities that are not connected yet are explicitly marked
+**Planned**.
+
+![JARVIS Device page showing CPU and memory charts, NVIDIA GPU readings, and local runtime status](docs/screenshots/device-dashboard.png)
+
+Screenshots captured on Windows on September 3, 2026. Hardware readings and
+response times are examples from that session, not performance benchmarks.
 
 ---
 
 ## Current Features
+
+### Native Windows Desktop
+
+| Page | Available now |
+| --- | --- |
+| Assistant | Local-model chat, expandable tool results, a compact multiline composer, and a system-monitor side panel on wider windows. |
+| Tasks | Requests and results from the current UI session. |
+| Device | Live CPU, memory, NVIDIA GPU, and local runtime status. |
+| Settings | Session-only appearance and monitoring controls; model/routing information is read-only. |
+| Errors | Session-only diagnostics, occurrence counts, error details, copy, and confirmed clear. |
+
+- Steel/cyan interface with responsive layouts and shared visual components.
+- Desktop shortcut that starts or reuses the local API and opens the Release app.
+- Ctrl+Enter sends; two consecutive Enter presses within 600 ms also send.
+  Shift+Enter inserts a newline, and active IME composition is protected.
+- UI errors use a compact notice and a dedicated Errors page instead of a large
+  red Flutter error panel. Command-line and IDE diagnostics are preserved.
+
+The desktop app uses the same Core tools and routing policy as the CLI.
+Conversation history, the UI task list, error reports, and UI preferences are
+not yet persisted across app sessions. See the [desktop guide](desktop_ui/README.md)
+for detailed behavior and limits.
 
 ### Local AI
 
@@ -77,14 +132,19 @@ Example commands:
 
 The application registry is generated locally and should not be committed to Git.
 
-### System Information
+### Live System Monitoring
 
-JARVIS can read basic local system information.
+The desktop reads actual system counters through the local API; monitoring
+does not call the language model or create tasks.
 
-Current system tools:
+- CPU utilization and physical memory usage, with bounded history charts.
+- NVIDIA GPU utilization, used/total VRAM, and temperature through NVML.
+- Updates every 2 seconds by default, with 2 / 5 / 10 second intervals and pause.
+- Polling pauses while the app is minimized; requests do not overlap.
+- Unsupported GPU metrics show N/A. AMD/Intel GPU monitoring is not implemented.
 
-- CPU usage
-- RAM usage
+The native conversation tool also reports CPU and RAM usage. Monitoring is
+lightweight but not free; pause it or use a slower interval on battery power.
 
 Example:
 
@@ -257,6 +317,13 @@ This avoids manually restarting JARVIS after every code change.
 
 ## Architecture
 
+The Flutter desktop connects to `app/api.py` on `127.0.0.1:8765`. The FastAPI
+service and terminal CLI reuse the same Core conversation loop, tools, and
+`services/task_router.py` policy. System telemetry is a separate read-only
+API path and does not enter the model loop.
+
+Core tool flow:
+
 ```text
                          User
                           │
@@ -304,7 +371,13 @@ The JARVIS engine controls what tools actually exist and how those tools execute
 ```text
 JARVIS_Local_AI/
 ├── app/
-│   └── main.py
+│   ├── main.py                 # Core conversation loop and CLI
+│   ├── api.py                  # Loopback API for the desktop
+│   └── desktop_launcher.py     # Windowless Release-app launcher
+│
+├── desktop_ui/                 # Flutter Windows app and widget tests
+├── docs/
+│   └── screenshots/            # README screenshots
 │
 ├── config/
 │   ├── apps.example.json
@@ -321,6 +394,7 @@ JARVIS_Local_AI/
 │   ├── project_registry.py
 │   ├── task_manager.py
 │   ├── task_router.py
+│   ├── system_telemetry.py
 │   └── agents/
 │       └── open_interpreter.py
 │
@@ -334,6 +408,8 @@ JARVIS_Local_AI/
 │
 ├── .gitignore
 ├── dev.ps1
+├── run-desktop.ps1
+├── create-desktop-shortcut.ps1
 ├── LICENSE
 ├── README.md
 └── requirements.txt
@@ -345,13 +421,23 @@ Generated local configuration files such as `apps.json`, `projects.json`, and `p
 
 ## Requirements
 
-Current development environment:
+For the Windows desktop source build:
 
-- Windows 11
-- Python 3
+- Windows 11 (current development platform)
+- Python 3 with pip
 - Git
-- Ollama
-- Qwen3 8B
+- [Ollama for Windows](https://docs.ollama.com/windows) and the `qwen3:8b` model
+- Flutter SDK; the current build uses Flutter 3.44.9 / Dart 3.12.2
+- Visual Studio with the **Desktop development with C++** workload, not just
+  Visual Studio Code; see [Flutter's Windows setup guide](https://docs.flutter.dev/platform-integration/windows/setup)
+
+The launch script currently expects Flutter at
+`C:\Flutter-3.44.9\flutter\bin\flutter.bat`. If your SDK lives elsewhere, update
+the `$Flutter` path in [run-desktop.ps1](run-desktop.ps1) before building.
+The Dart SDK constraint is declared in [desktop_ui/pubspec.yaml](desktop_ui/pubspec.yaml).
+
+NVIDIA hardware and a working driver are needed for NVIDIA-specific telemetry,
+not for displaying the desktop shell. Available GPU metrics depend on the device.
 
 ---
 
@@ -359,75 +445,43 @@ Current development environment:
 
 ### 1. Clone the repository
 
-```bash
+Run these commands in PowerShell. All later commands start from the repository root.
+
+```powershell
 git clone https://github.com/Justin11-13/JARVIS_Local_AI.git
 cd JARVIS_Local_AI
 ```
 
-### 2. Create a virtual environment
+### 2. Create the Python environment
 
 ```powershell
 python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-### 3. Activate the virtual environment
+The commands use the virtual environment directly; activation is optional.
 
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
+### 3. Prepare the local model
 
-If PowerShell blocks script execution:
-
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
-.\.venv\Scripts\Activate.ps1
-```
-
-### 4. Install dependencies
-
-```powershell
-python -m pip install -r requirements.txt
-```
-
-### Windows desktop app (Flutter)
-
-The preferred desktop UI is the Flutter Windows application in `desktop_ui/`.
-It connects to the existing JARVIS Core for chat and tools, with live CPU, memory
-and NVIDIA GPU monitoring plus a session-only error log.
-
-```powershell
-.\run-desktop.ps1
-```
-
-The Flutter client connects to the local-only FastAPI service at
-`127.0.0.1:8765`, which reuses JARVIS Core's existing model loop, tools, and
-`TaskRouter`. The UI therefore cannot bypass the existing safety boundary.
-
-The older `ui.desktop_app` Tkinter prototype remains only as a reference while
-the Flutter application is developed.
-
-### 5. Install Ollama
-
-Install Ollama for Windows.
-
-Then pull the current default model:
+Install and start [Ollama for Windows](https://docs.ollama.com/windows), then pull
+and check the default model:
 
 ```powershell
 ollama pull qwen3:8b
-```
-
-Confirm it is installed:
-
-```powershell
 ollama list
 ```
 
-### 6. Configure project scan roots
+Keep Ollama running while using chat. The JARVIS desktop shortcut starts the
+JARVIS API, not Ollama. A connected API indicator does not verify model availability.
 
-Copy the example configuration:
+### 4. Configure project scan roots (optional)
+
+For project tools, create a local configuration without replacing an existing one:
 
 ```powershell
-Copy-Item config\project_roots.example.json config\project_roots.json
+if (-not (Test-Path config\project_roots.json)) {
+    Copy-Item config\project_roots.example.json config\project_roots.json
+}
 ```
 
 Then edit:
@@ -449,27 +503,81 @@ Example:
 
 JARVIS only scans directories configured here.
 
-### 7. Optional project configuration
-
-If required:
+To manually register projects, you can also use
+[config/projects.example.json](config/projects.example.json) as a template:
 
 ```powershell
-Copy-Item config\projects.example.json config\projects.json
+if (-not (Test-Path config\projects.json)) {
+    Copy-Item config\projects.example.json config\projects.json
+}
 ```
 
 Local project configuration should not be committed.
 
-### 8. Start JARVIS
+### 5. Build the desktop app and create its shortcut
+
+Complete the [Flutter Windows toolchain setup](https://docs.flutter.dev/platform-integration/windows/setup),
+then check it and build:
 
 ```powershell
-python -m app.main
+& "C:\Flutter-3.44.9\flutter\bin\flutter.bat" doctor -v
+.\run-desktop.ps1 -BuildOnly -Release
+.\create-desktop-shortcut.ps1
 ```
+
+If your SDK path differs, use that path for `doctor` and update the launcher as
+described in [Requirements](#requirements). Resolve Windows/Visual Studio toolchain
+errors before building.
+
+Double-click **JARVIS** on your Windows desktop. The shortcut uses the compiled
+Release app: no terminal, dependency download, or Flutter compilation on each
+launch. It starts the local API when needed and waits for it to become ready.
+
+The first build downloads locked Flutter dependencies into the ignored
+`.pub-cache/` inside this repository; the shared AppData cache is not modified.
+Keep the repository, virtual environment, and complete build folder in place.
+The shortcut is not a standalone installer, and the executable needs its nearby
+DLLs and `data/` directory.
+
+### Other ways to run
+
+For Flutter development, including the usual build/run output:
+
+```powershell
+.\run-desktop.ps1
+```
+
+For the terminal-only assistant:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.main
+```
+
+The older `ui.desktop_app` Tkinter prototype is retained as a reference, not the
+preferred desktop UI.
+
+### Updating and troubleshooting
+
+- **Flutter source changed:** close the Release app and rerun
+  `.\run-desktop.ps1 -BuildOnly -Release`. The existing shortcut will open the
+  updated build.
+- **Python backend changed:** restart the existing JARVIS API; opening another
+  desktop window does not reload a running backend.
+- **Shortcut cannot start:** check the error dialog and `tmp/desktop-startup.log`.
+  For build diagnostics, run `.\run-desktop.ps1 -BuildOnly` in PowerShell.
+- **API connected, chat unavailable:** check that Ollama is running and
+  `ollama list` includes `qwen3:8b`.
+
+Closing the UI does not stop the background API. The shortcut does not add
+Windows login startup or a keyboard hotkey. More details are in the
+[desktop guide](desktop_ui/README.md).
 
 ---
 
 ## Development Mode
 
-JARVIS supports automatic restart during development.
+The **terminal CLI** supports automatic restart during development. This does
+not hot-reload the separate desktop API process.
 
 ### Install `watchfiles`
 
@@ -485,11 +593,39 @@ JARVIS supports automatic restart during development.
 
 When Python source files change, JARVIS will automatically restart and load the updated code.
 
-For normal usage, use:
+For normal desktop usage, use the **JARVIS** desktop shortcut. To run the CLI
+without auto-reload:
 
 ```powershell
-python -m app.main
+.\.venv\Scripts\python.exe -m app.main
 ```
+
+### Verification
+
+Backend tests and a Windows dependency/build check, from the repository root:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests
+.\run-desktop.ps1 -BuildOnly
+```
+
+To run Flutter analysis and widget tests with the same project-local cache:
+
+```powershell
+$env:PUB_CACHE = Join-Path $PWD ".pub-cache"
+$FlutterSdk = "C:\Flutter-3.44.9\flutter\bin\flutter.bat"
+Push-Location desktop_ui
+try {
+    & $FlutterSdk pub get --enforce-lockfile
+    & $FlutterSdk analyze --no-pub
+    & $FlutterSdk test --no-pub
+} finally {
+    Pop-Location
+}
+```
+
+Use your actual Flutter path if different. These commands do not install a
+shortcut or launch the UI; the `PUB_CACHE` assignment applies to this shell.
 
 ---
 
@@ -559,15 +695,18 @@ python -m app.main
 
 ## Security Model
 
-JARVIS currently follows an allow-listed tool architecture.
+JARVIS uses allow-listed native tools and Python-enforced routing decisions.
 
-The AI model does not receive unrestricted PowerShell or shell access.
+The normal native-tool path does not expose arbitrary shell execution to the
+model. The optional Open Interpreter adapter is a separate dynamic executor;
+review its workspace, requested work, and confirmation carefully.
 
 ### Currently Allowed
 
 - Open discovered applications
 - Read CPU usage
 - Read RAM usage
+- Read NVIDIA GPU telemetry through the desktop API
 - Discover projects from configured roots
 - List discovered projects
 - Read project metadata
@@ -577,9 +716,9 @@ The AI model does not receive unrestricted PowerShell or shell access.
 - Read project files
 - Search project source code
 
-### Currently Restricted
+### Native Tool Restrictions
 
-JARVIS does not currently provide unrestricted access to:
+Native tools do not provide:
 
 - Arbitrary PowerShell execution
 - Arbitrary shell execution
@@ -591,7 +730,15 @@ JARVIS does not currently provide unrestricted access to:
 - System configuration changes
 - Administrator-level system operations
 
-Higher-risk capabilities should be protected by a dedicated permission layer before being added.
+Open Interpreter can perform broader local work when its routing policy allows
+it. In automatic mode, low-risk work may proceed directly; medium/high-risk
+work requires confirmation. Risk classification currently uses keyword rules,
+not a complete operating-system sandbox. Workspace validation and confirmation
+are safeguards, not a guarantee that arbitrary generated code is safe.
+
+The desktop API binds to loopback when launched by the supplied scripts. Do not
+expose it to a network. The full permission/trust model described below remains
+planned, including dedicated native write and Git commit/push approval flows.
 
 ---
 
@@ -601,6 +748,10 @@ The following files should remain local and should not be committed:
 
 ```text
 .venv/
+.pub-cache/
+desktop_ui/build/
+desktop_ui/.dart_tool/
+tmp/
 .env
 config/apps.json
 config/projects.json
@@ -624,23 +775,14 @@ config/project_roots.example.json
 
 ## Development Status
 
-JARVIS is currently an experimental local AI agent.
+JARVIS is an experimental Windows desktop assistant with a working Flutter UI,
+loopback API, local-model tool loop, read-only project tools, live telemetry,
+and guarded Open Interpreter delegation.
 
-Current focus:
-
-```text
-Local AI
-+
-Multi-Step Agent Loop
-+
-Windows Application Discovery
-+
-Automatic Project Discovery
-+
-Git Status
-+
-Read-Only Developer Tools
-```
+The current product foundation includes the desktop shortcut, Assistant / Tasks /
+Device / Settings / Errors pages, and session-only diagnostics. Voice input,
+wake word, a desktop companion, persistent history, system tray integration,
+and editable model/routing configuration are still planned.
 
 It is not yet intended to provide unrestricted autonomous control of a computer.
 
@@ -699,12 +841,14 @@ Notify user
                   Monitor and Notification
 ~~~
 
-**Implemented foundation:** local Qwen through Ollama, a text conversation
-loop, native tools, TaskRouter, TaskManager, terminal notifications, and Open
-Interpreter routing safeguards.
+**Implemented foundation:** local Qwen through Ollama, the conversation loop,
+native tools, TaskRouter, TaskManager, terminal notifications, Open Interpreter
+routing safeguards, a loopback FastAPI service, and the Flutter desktop app with
+live telemetry, session diagnostics, and a desktop shortcut.
 
-**Planned:** voice, desktop UI, settings, local API, browser control, hardware
-integrations, and optional cloud-model providers.
+**Planned:** voice, advanced/persistent settings, system tray and lifecycle
+controls, browser control, hardware control integrations, and optional
+cloud-model providers. NVIDIA telemetry is available; hardware control is not.
 
 ### Brain, Models, and Executors
 
@@ -774,16 +918,24 @@ A wake word should begin a short conversation session so the user can make
 follow-up requests without repeating it. The planned stack includes
 openWakeWord, voice activity detection, faster-whisper, and Piper or Kokoro.
 
+**Implemented desktop experience:**
+
+- Flutter Windows app with Assistant, Tasks, Device, Settings, and Errors pages.
+- Desktop shortcut for the Release app, with automatic local API startup/reuse.
+- Live CPU, memory, and NVIDIA GPU monitoring, interval controls, and pause.
+- Compact composer, tool evidence, session-only task results, and diagnostics.
+- Shared steel/cyan styling and responsive layouts; appearance/monitor settings
+  are session-only. Model and routing controls are read-only.
+
 **Planned desktop experience:**
 
-- Desktop UI, system tray, background lifecycle controls, and notifications.
+- System tray, background lifecycle controls, and Windows notifications.
 - Settings for model/provider, microphone, wake word, conversation timeout,
   project roots, application scan roots, routing mode, and agent settings.
-- Desktop orb/pet, status dashboard, Liquid Glass visual language, and
-  accessible reduced-motion behavior.
+- Desktop orb/pet, additional visual themes/materials, and persistent preferences.
 
-Users should configure these options in the UI rather than editing model or
-scan-path constants in source code.
+Eventually, users should configure model and scan-path options in the UI rather
+than editing configuration files or source constants.
 
 ### Permission and Security Model
 
@@ -837,15 +989,16 @@ failure.
 
 **Implemented foundation:** managed Open Interpreter tasks track creation,
 start, completion, duration, result, and error; terminal notifications report
-completion or failure.
+completion or failure. The desktop Tasks page lists requests and results from
+the current UI session; it is not a durable or complete backend task archive.
 
-**Planned:** observation/retry policy, task history, Windows notifications,
+**Planned:** observation/retry policy, persistent task history, Windows notifications,
 desktop UI notifications, and voice notifications.
 
 ### Local API
 
-**Planned:** a FastAPI local API will keep the desktop UI separate from JARVIS
-internal modules.
+**Implemented:** `app/api.py` provides the desktop's FastAPI interface on
+`127.0.0.1:8765`, keeping Flutter separate from JARVIS internal modules.
 
 ~~~text
 Desktop UI
@@ -859,9 +1012,18 @@ TaskRouter
 Tools / Models / Agents
 ~~~
 
-Likely local endpoints include task, status, apps, projects, settings, and
-model. The API must preserve the same policy checks as the CLI; it must not
-become a bypass around TaskRouter.
+Current endpoints include:
+
+- `GET /api/health` — API status and configured model/routing information;
+  does not contact the model.
+- `GET /api/telemetry` — read-only CPU, memory, and NVIDIA GPU counters.
+- `POST /api/chat` — conversation and tool execution through Core/TaskRouter.
+- `GET /api/projects` and the `/api/projects/...` actions — registered-project
+  metadata, Git status, read-only file tools, and explicit registry refresh.
+
+The API retains Python routing checks for tool execution. Persistent task,
+editable settings, model-management, and broader application-control APIs are
+still planned. Loopback binding is not a substitute for a full permission model.
 
 ### Delivery Phases
 
@@ -892,9 +1054,13 @@ become a bypass around TaskRouter.
 
 #### Phase 3 — Local API and Desktop Product
 
-- [ ] FastAPI local API.
-- [ ] Desktop settings, system tray, lifecycle controls, and status dashboard.
-- [ ] Windows notifications and accessible visual design.
+- [x] Loopback FastAPI API reusing Core tools and routing policy.
+- [x] Flutter Windows shell with Assistant, Tasks, Device, Settings, and Errors.
+- [x] Live CPU/RAM/NVIDIA GPU monitoring and a status dashboard.
+- [x] Session-only appearance/monitor preferences and error diagnostics.
+- [x] Release build and one-click desktop shortcut.
+- [ ] Persistent and editable model, routing, project, and agent settings.
+- [ ] System tray, backend lifecycle controls, and Windows notifications.
 
 #### Phase 4 — Voice and Multimodal Interaction
 
