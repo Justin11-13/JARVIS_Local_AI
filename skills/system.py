@@ -1,12 +1,4 @@
 import os
-import shutil
-import subprocess
-import psutil
-
-
-import os
-import subprocess
-
 import psutil
 
 from services.app_registry import (

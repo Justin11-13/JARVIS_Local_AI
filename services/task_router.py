@@ -1,7 +1,8 @@
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 from services.agents.open_interpreter import OpenInterpreterAdapter
+from services.permission_manager import ActionRequest, PermissionDecision, PermissionManager
 from services.notification_service import NotificationService
 from services.task_manager import TaskManager
 
@@ -25,6 +26,8 @@ class TaskRouter:
         self.open_interpreter = open_interpreter
         self.task_manager = task_manager
         self.notification_service = notification_service
+        self.permission_manager = PermissionManager()
+        self.pending_action_request: dict[str, Any] | None = None
         self.pending_open_interpreter_request: dict | None = None
 
     @staticmethod
@@ -136,10 +139,26 @@ class TaskRouter:
             }
 
         risk = self.classify_open_interpreter_risk(task)
-        self.pending_open_interpreter_request = {
+        confirmation_count = 1
+        pending_request = {
             "task": task,
             "workspace": str(workspace_path),
             "risk": risk,
+        }
+        self.pending_open_interpreter_request = pending_request
+        self.pending_action_request = {
+            "request": ActionRequest(
+                executor="open_interpreter",
+                action="delegate_to_open_interpreter",
+                purpose=task,
+                data_scope="approved_workspace",
+            ),
+            "risk": risk,
+            "confirmations_remaining": confirmation_count,
+            "execute": lambda: self._delegate_to_open_interpreter(
+                task=task,
+                workspace=str(workspace_path),
+            ),
         }
 
         return {
@@ -148,7 +167,11 @@ class TaskRouter:
             "task": task,
             "workspace": str(workspace_path),
             "risk": risk,
-            "message": f"这个 Open Interpreter 任务风险等级为 {risk.upper()}。是否继续？请回复 yes 或 no。",
+            "confirmation_count": confirmation_count,
+            "confirmation_step": 1,
+            "message": (
+                f"这个 Open Interpreter 任务风险等级为 {risk.upper()}。是否继续？请回复 yes 或 no。"
+            ),
         }
 
     def _delegate_to_open_interpreter(self, task: str, workspace: str) -> dict:
@@ -204,6 +227,131 @@ class TaskRouter:
             "error": error,
             "notification": "",
         }
+
+    @staticmethod
+    def _confirmation_response(decision: PermissionDecision) -> dict:
+        required_count = max(1, decision.confirmation_count)
+        confirmation_message = "此操作需要确认。是否继续？请回复 yes 或 no。"
+        return {
+            "success": True,
+            "status": "awaiting_confirmation",
+            "risk": decision.risk,
+            "action": decision.request.action,
+            "executor": decision.request.executor,
+            "data_scope": decision.request.data_scope,
+            "requires_confirmation": True,
+            "confirmation_count": required_count,
+            "confirmation_step": 1,
+            "audit_summary": decision.audit_summary,
+            "message": confirmation_message,
+        }
+
+    def _request_native_confirmation(
+        self,
+        decision: PermissionDecision,
+        function_to_call: Callable,
+        arguments: dict,
+    ) -> dict:
+        self.pending_action_request = {
+            "request": decision.request,
+            "risk": decision.risk,
+            "confirmations_remaining": max(1, decision.confirmation_count),
+            "execute": lambda: self._execute_native_function(function_to_call, arguments),
+        }
+        self.pending_open_interpreter_request = None
+        return self._confirmation_response(decision)
+
+    def request_external_action(
+        self,
+        executor: str,
+        action: str,
+        purpose: str,
+        execute: Callable[[], dict],
+    ) -> dict:
+        """Require consent before any user text is submitted to an external service."""
+        request = ActionRequest(
+            executor=executor,
+            action=action,
+            purpose=purpose,
+            data_scope="external_submission",
+        )
+        decision = self.permission_manager.evaluate(request)
+        self.pending_action_request = {
+            "request": request,
+            "risk": decision.risk,
+            "confirmations_remaining": max(1, decision.confirmation_count),
+            "execute": lambda: self._execute_external_action(request, execute),
+        }
+        self.pending_open_interpreter_request = None
+
+        response = self._confirmation_response(decision)
+        response["submission_preview"] = purpose
+        response["message"] = (
+            f"这段文字会发送到 {executor.title()} 进行理解；未包含本地文件或系统资料。"
+            "是否继续？请回复 yes 或 no。"
+        )
+        return response
+
+    def execute_external_action(
+        self,
+        executor: str,
+        action: str,
+        purpose: str,
+        execute: Callable[[], dict],
+    ) -> dict:
+        """Run an external action only when the policy permits it directly."""
+        request = ActionRequest(
+            executor=executor,
+            action=action,
+            purpose=purpose,
+            data_scope="external_submission",
+        )
+        decision = self.permission_manager.evaluate(request)
+        if decision.requires_confirmation:
+            return self.request_external_action(executor, action, purpose, execute)
+
+        return self._execute_external_action(request, execute)
+
+    def _execute_external_action(
+        self,
+        request: ActionRequest,
+        execute: Callable[[], dict],
+    ) -> dict:
+        managed_task = self.task_manager.create_task(title=request.purpose[:80], agent=request.executor)
+        self.task_manager.start_task(managed_task.id)
+        result = execute()
+
+        if result.get("success"):
+            self.task_manager.complete_task(managed_task.id, result=result.get("result", ""))
+        else:
+            self.task_manager.fail_task(
+                managed_task.id,
+                error=result.get("error", "External executor failed."),
+            )
+
+        notification = self.notification_service.notify_task_status(
+            status=result.get("status", "failed"),
+            title=request.purpose,
+            result=result.get("result", ""),
+            error=result.get("error", ""),
+        )
+        return {
+            "task": self.task_manager.get_task(managed_task.id),
+            "success": result.get("success", False),
+            "status": result.get("status", "failed"),
+            "result": result.get("result", ""),
+            "error": result.get("error", ""),
+            "executor": request.executor,
+            "tool_calls": result.get("tool_calls", []),
+            "notification": notification,
+        }
+
+    @staticmethod
+    def _execute_native_function(function_to_call: Callable, arguments: dict):
+        try:
+            return function_to_call(**arguments)
+        except Exception as error:
+            return f"Tool execution failed: {error}"
 
     def execute_tool(
         self,
@@ -261,30 +409,58 @@ class TaskRouter:
         if not function_to_call:
             return f"Tool '{function_name}' is not available."
 
-        try:
-            return function_to_call(**arguments)
-        except Exception as error:
-            return f"Tool '{function_name}' failed: {error}"
+        decision = self.permission_manager.evaluate(
+            ActionRequest(
+                executor="native",
+                action=function_name,
+                purpose=user_input.strip() or function_name,
+            )
+        )
+        if decision.requires_confirmation:
+            return self._request_native_confirmation(decision, function_to_call, arguments)
 
-    def handle_pending_open_interpreter_confirmation(self, user_input: str) -> tuple[bool, str | None, dict | None]:
-        if not self.pending_open_interpreter_request:
+        return self._execute_native_function(function_to_call, arguments)
+
+    def handle_pending_confirmation(self, user_input: str) -> tuple[bool, str | None, Any | None]:
+        """Apply a yes/no reply to the one action currently awaiting approval."""
+        if not self.pending_action_request:
             return False, None, None
 
         normalized_input = user_input.strip().lower()
-        yes_answers = {"yes", "y", "继续", "可以", "确认", "同意", "好", "好的", "ok", "okay"}
+        yes_answers = {"yes", "y", "是", "是的", "继续", "可以", "确认", "同意", "好", "好的", "ok", "okay"}
         no_answers = {"no", "n", "不要", "取消", "不同意", "不用", "算了"}
 
         if normalized_input in yes_answers:
-            pending_request = self.pending_open_interpreter_request
+            pending_request = self.pending_action_request
+            request = pending_request["request"]
+            is_open_interpreter = request.executor == "open_interpreter"
+            confirmations_remaining = pending_request.get("confirmations_remaining", 1)
+            if confirmations_remaining > 1:
+                pending_request["confirmations_remaining"] = confirmations_remaining - 1
+                return True, "该操作仍需要确认。是否继续？请回复 yes 或 no。", None
+            self.pending_action_request = None
             self.pending_open_interpreter_request = None
-            result = self._delegate_to_open_interpreter(
-                task=pending_request["task"],
-                workspace=pending_request["workspace"],
-            )
-            return True, "已确认，正在交给 Open Interpreter 执行。", result
+            result = pending_request["execute"]()
+            if is_open_interpreter:
+                return True, "已确认，正在交给 Open Interpreter 执行。", result
+            return True, "已确认，正在执行该操作。", result
 
         if normalized_input in no_answers:
+            request = self.pending_action_request["request"]
+            self.pending_action_request = None
             self.pending_open_interpreter_request = None
-            return True, "已取消 Open Interpreter 任务。", None
+            if request.executor == "open_interpreter":
+                return True, "已取消 Open Interpreter 任务。", None
+            return True, "已取消等待确认的操作。", None
 
-        return True, "目前有一个 Open Interpreter 任务等待确认。请回复 yes 或 no。", None
+        request = self.pending_action_request["request"]
+        if request.executor == "open_interpreter":
+            return True, "目前有一个 Open Interpreter 任务等待确认。请回复 yes 或 no。", None
+        return True, "目前有一个操作等待确认。请回复 yes 或 no。", None
+
+    def handle_pending_open_interpreter_confirmation(
+        self,
+        user_input: str,
+    ) -> tuple[bool, str | None, Any | None]:
+        """Backward-compatible name for the former Open Interpreter-only flow."""
+        return self.handle_pending_confirmation(user_input)

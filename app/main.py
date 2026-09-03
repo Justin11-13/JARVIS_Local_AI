@@ -2,12 +2,15 @@
 
 This module owns the native tool registry and the policy services shared by the
 terminal and loopback API. It intentionally does not start, load, or import a
-local language model. Codex integration is added through a policy-controlled
-executor in a later migration phase.
+local language model. Gemini is an optional BYOK cloud brain; any future Codex
+integration remains policy-controlled.
 """
 
+from services.agents.gemini import GeminiAdapter
 from services.agents.open_interpreter import OpenInterpreterAdapter
+from services.byok_config import load_byok_config
 from services.notification_service import NotificationService
+from services.jarvis_memory import JarvisMemory
 from services.task_manager import TaskManager
 from services.task_router import TaskRouter
 from skills.files import list_files, read_file, search_files
@@ -19,15 +22,33 @@ from skills.project import (
     refresh_project_registry,
 )
 from skills.system import get_system_info, open_app
+from skills.windows import (
+    adjust_volume,
+    get_battery_status,
+    get_network_status,
+    list_running_processes,
+    lock_computer,
+    media_control,
+    open_known_folder,
+    open_windows_setting,
+    restart_computer,
+    shutdown_computer,
+    sleep_computer,
+    toggle_mute,
+)
 
 
-BRAIN_PROVIDER = "codex"
-BRAIN_STATUS = "not_configured"
 OPEN_INTERPRETER_ROUTING_MODE = "automatic"
 
+byok_config = load_byok_config()
+BRAIN_PROVIDER = byok_config.provider
+BRAIN_MODEL = byok_config.model
 open_interpreter = OpenInterpreterAdapter()
+gemini = GeminiAdapter()
+BRAIN_STATUS = "unsupported" if byok_config.error else ("configured" if gemini.is_configured() else "not_configured")
 task_manager = TaskManager()
 notification_service = NotificationService()
+jarvis_memory = JarvisMemory()
 task_router = TaskRouter(
     routing_mode=OPEN_INTERPRETER_ROUTING_MODE,
     open_interpreter=open_interpreter,
@@ -47,15 +68,27 @@ AVAILABLE_TOOLS = {
     "read_file": read_file,
     "search_files": search_files,
     "refresh_project_registry": refresh_project_registry,
+    "get_battery_status": get_battery_status,
+    "get_network_status": get_network_status,
+    "list_running_processes": list_running_processes,
+    "adjust_volume": adjust_volume,
+    "toggle_mute": toggle_mute,
+    "media_control": media_control,
+    "lock_computer": lock_computer,
+    "open_known_folder": open_known_folder,
+    "open_windows_setting": open_windows_setting,
+    "shutdown_computer": shutdown_computer,
+    "restart_computer": restart_computer,
+    "sleep_computer": sleep_computer,
 }
 
 
-def codex_not_configured_reply() -> str:
-    """Describe the deliberate Phase 1 boundary without pretending to reason."""
+def gemini_not_configured_reply() -> str:
+    """Explain how to enable the optional cloud understanding fallback."""
     return (
-        "Codex is the configured JARVIS reasoning backend, but its executor is "
-        "not configured yet. Native tools and the existing Open Interpreter "
-        "permission flow remain available through their explicit interfaces."
+        "Gemini cloud understanding is not configured. Add a valid local API key, "
+        "select JARVIS_BRAIN_PROVIDER=gemini, choose a supported Gemini model, "
+        "and set GEMINI_ENABLED=true in .env."
     )
 
 
@@ -83,10 +116,8 @@ def display_tool_result(result) -> None:
 
 
 def handle_router_confirmation(user_input: str) -> bool:
-    """Handle an already-approved Open Interpreter request from the CLI."""
-    handled, message, result = task_router.handle_pending_open_interpreter_confirmation(
-        user_input
-    )
+    """Handle an already-pending action confirmation from the CLI."""
+    handled, message, result = task_router.handle_pending_confirmation(user_input)
     if not handled:
         return False
 
@@ -94,7 +125,10 @@ def handle_router_confirmation(user_input: str) -> bool:
         print(f"\nJARVIS > {message}")
     if result:
         display_tool_result(result)
-        final_result = result.get("result") or result.get("error") or "任务已结束。"
+        if isinstance(result, dict):
+            final_result = result.get("result") or result.get("error") or "任务已结束。"
+        else:
+            final_result = str(result)
         print(f"\nJARVIS > {final_result}")
     return True
 
@@ -118,7 +152,7 @@ def run_jarvis() -> None:
             break
         if handle_router_confirmation(user_input):
             continue
-        print(f"\nJARVIS > {codex_not_configured_reply()}")
+        print(f"\nJARVIS > {gemini_not_configured_reply()}")
 
 
 if __name__ == "__main__":

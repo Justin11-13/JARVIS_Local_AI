@@ -1,22 +1,24 @@
 # JARVIS Local AI Assistant
 
-JARVIS is an open-source, local-first Windows desktop foundation with a native
-Flutter app, a loopback API, policy-controlled local tools, and live hardware
-monitoring. It is not yet a general-purpose chat assistant.
+JARVIS is an open-source, local-first Windows desktop assistant foundation with
+a native Flutter app, a loopback API, policy-controlled local tools, live
+hardware monitoring, and an optional Gemini Bring Your Own Key (BYOK) brain.
 
 Use the Desktop app to watch live CPU, memory, and NVIDIA GPU readings. Its
 local API exposes explicit, safe project/system operations for integrations.
 Once built, launch it from a desktop icon without opening a terminal or
 recompiling the app.
 
-JARVIS does not load a local language model and does not use a GPT API. General
-natural-language reasoning, ChatGPT UI delegation, and Codex delegation are not
-implemented yet. Python policy—not an AI prompt alone—governs the local tools
-and the existing Open Interpreter integration.
+JARVIS does not load a local language model and does not use a GPT API. When a
+user enables Gemini BYOK, Gemini understands the user's text and can propose a
+small, declared set of local tools. Python policy—not an AI prompt alone—still
+validates each tool call and controls confirmation. ChatGPT UI delegation and
+Codex delegation are not implemented yet.
 
 **Status:** working desktop/API/telemetry foundation, under active development.
-Free-form task chat, voice, wake word, a desktop companion, and persistent
-history are not implemented.
+Gemini-backed free-form chat and the current safe local-tool set work when the
+user supplies a local key. Voice, wake word, a desktop companion, persistent
+history, and Codex delegation are not implemented.
 
 [Screenshots](#desktop-preview) · [Installation](#installation) ·
 [Features](#current-features) · [Security](#security-model) ·
@@ -51,7 +53,7 @@ response times are examples from that session, not performance benchmarks.
 
 | Page | Available now |
 | --- | --- |
-| Assistant | Chat UI shell, local greeting replies, pending Open Interpreter confirmation replies, and a system-monitor side panel on wider windows. Free-form requests are not executed yet. |
+| Assistant | Gemini-backed chat when BYOK is configured, native tool results, one-step high-risk confirmation, and a system-monitor side panel on wider windows. |
 | Tasks | Requests and results from the current UI session. |
 | Device | Live CPU, memory, NVIDIA GPU, and local runtime status. |
 | Settings | Session-only appearance and brain/routing information is read-only. |
@@ -79,45 +81,51 @@ for detailed behavior and limits.
   file search, and a user-requested project-registry refresh.
 - **Native Python tools / 原生 Python 工具:** the Core contains application
   discovery/opening, system information, project discovery, Git status, and
-  registered-project read-only file tools. For example, `open_app("Chrome")`
-  finds a Start Menu shortcut and opens it. These are callable through explicit
-  Core/API interfaces, not inferred from arbitrary chat text.
+  registered-project read-only file tools. It also supports battery/network/
+  process status, volume and media controls, selected known folders/settings,
+  locking, and power actions. For example, `open_app("Chrome")` finds a Start
+  Menu shortcut and opens it.
+- **Gemini BYOK chat / 自备 Gemini Key:** users can configure one local Gemini
+  API key in `.env`. Gemini can answer general questions in Chinese or English,
+  keep a small in-session memory, and request only declared JARVIS tools. It
+  never receives a shell, unrestricted Windows access, or the API key itself.
+  See [Gemini BYOK setup](#gemini-byok-setup) before enabling it.
 - **Open Interpreter safety foundation / 安全基础:** workspace validation,
   manual/ask/automatic modes, risk classification, confirmation, task records,
   and notifications are implemented. When explicitly invoked through the
   router and available on PATH, it can run a bounded local task such as opening
   an application; the Desktop chat does not yet create a new Open Interpreter
   task from free-form text.
-- **Chat / 聊天:** exact greetings such as `hello` and `你好` receive a local
-  reply. The chat endpoint also accepts `yes`/`no` only for an Open Interpreter
-  task that was already created through an explicit interface.
+- **Chat / 聊天:** exact greetings work locally without an API key. With Gemini
+  enabled, a normal request may call a validated native tool. A high-risk
+  action—locking, sleeping, restarting, or shutting down Windows—stops for one
+  clear `yes`/`no` confirmation before Python executes it.
 - **Desktop startup / 桌面启动:** the provided shortcut starts or reuses the
   loopback API, opens the Release UI, and stops only the API instance it started
   when that window closes.
 
 ### Not Available Yet / 现在还不能做
 
-- A free-form message such as “Show my current CPU and memory usage” or “打开
-  Chrome” is **not** routed to a native/Open Interpreter tool from the chat
-  composer yet. Open Device or the Assistant side panel to view telemetry;
-  Chrome requires an explicit native/Open Interpreter caller today.
-- Codex, ChatGPT UI, and automatic natural-language tool selection are not
-  configured. JARVIS deliberately returns an unavailable message instead of
-  pretending that work was completed.
+- Codex and ChatGPT UI delegation are not configured. A coding request is not
+  silently handed to another provider; JARVIS reports its current limit.
 - No Ollama, Qwen, other local model, GPT API, automatic browser control,
-  unrestricted PowerShell, file-writing chat workflow, or autonomous computer
-  control is available.
+  unrestricted PowerShell, file-writing chat workflow, or unrestricted
+  autonomous computer control is available.
 
 The intended, not-yet-implemented direction is documented in the bilingual
 [implementation plan](docs/chatgpt-codex-implementation-plan.md).
 
 ### Current Chat Boundary / 当前聊天边界
 
-The Assistant composer is present, but it is not connected to a reasoning
-executor. It cannot currently infer that “Show my current CPU and memory usage”
-should call a local tool. That is why the screenshot receives the Codex-not-
-configured response even while the CPU/RAM panel is capable of showing live
-data. This is an intentional migration boundary, not a telemetry failure.
+The Assistant composer uses Gemini only after the user deliberately enables
+BYOK. Gemini may suggest one of the declared local tools, but JARVIS validates
+the name and arguments before routing it to Python. It can perform at most
+three local-tool calls per message. Credential-like files are blocked and
+credential-like text is redacted before a tool result can return to Gemini.
+
+This is an assistant boundary, not an unrestricted-agent promise: Gemini does
+not receive a PowerShell terminal, a generic file writer, administrator access,
+or permission to bypass a confirmation.
 
 ### Native Application Discovery
 
@@ -159,9 +167,9 @@ does not call the language model or create tasks.
 - Polling pauses while the app is minimized; requests do not overlap.
 - Unsupported GPU metrics show N/A. AMD/Intel GPU monitoring is not implemented.
 
-The chat composer does not currently route CPU/RAM questions to this API.
-Monitoring is lightweight but not free; pause it or use a slower interval on
-battery power.
+With Gemini BYOK enabled, the chat composer can route a CPU/RAM question to the
+same read-only API. Monitoring is lightweight but not free; pause it or use a
+slower interval on battery power.
 
 Example:
 
@@ -401,9 +409,6 @@ JARVIS_Local_AI/
 │   ├── project_roots.example.json
 │   └── projects.example.json
 │
-├── memory/
-│   └── __init__.py
-│
 ├── services/
 │   ├── __init__.py
 │   ├── app_registry.py
@@ -477,7 +482,52 @@ python -m venv .venv
 
 The commands use the virtual environment directly; activation is optional.
 
-### 3. Configure project scan roots (optional)
+### 3. Configure Gemini BYOK (optional, enables free-form chat)
+
+BYOK means **Bring Your Own Key**: every user keeps their own Gemini key on
+their own computer. The key is not part of this repository and must never be
+committed or pasted into an issue, screenshot, or source file.
+
+1. Open [Google AI Studio API Keys](https://aistudio.google.com/app/apikey),
+   create an API key, and select the Google Cloud project you want it attached
+   to. New AI Studio keys are authorization keys by default; Google documents
+   that they are restricted to the Gemini API and help protect leaked keys.
+2. Make a local `.env` only if one does not already exist:
+
+   ```powershell
+   if (-not (Test-Path .env)) {
+       Copy-Item .env.example .env
+   }
+   ```
+
+3. Open `.env` in an editor and paste the key after `GEMINI_API_KEY=`. Keep the
+   selected provider and model as follows:
+
+   ```dotenv
+   JARVIS_BRAIN_PROVIDER=gemini
+   GEMINI_API_KEY=PASTE_YOUR_OWN_KEY_HERE
+   GEMINI_MODEL=gemini-3.5-flash-lite
+   GEMINI_ENABLED=true
+   ```
+
+4. Restart the JARVIS backend. `GET /api/health` reports the selected `brain`,
+   `brain_model`, and whether it is configured; it never returns the key.
+
+`gemini` is the only supported BYOK provider today. Selecting an unimplemented
+provider, for example `JARVIS_BRAIN_PROVIDER=openai`, deliberately reports
+`unsupported` instead of silently using Gemini. Change `GEMINI_MODEL` only to a
+model available to your own key/project.
+
+Google's free/unpaid Gemini quota is not suitable for secrets: its current
+terms say prompts and responses may be used to improve products and may be
+reviewed by humans. Do not send passwords, private keys, confidential source,
+or personal data through it. JARVIS blocks common secret files and redacts
+common credential patterns, but that is a safety layer—not a guarantee.
+Read Google's current [API key guide](https://ai.google.dev/gemini-api/docs/api-key)
+and [Gemini API Additional Terms](https://ai.google.dev/gemini-api/terms)
+before distributing an app that uses the API.
+
+### 4. Configure project scan roots (optional)
 
 For project tools, create a local configuration without replacing an existing one:
 
@@ -555,9 +605,6 @@ For the terminal-only assistant:
 ```powershell
 .\.venv\Scripts\python.exe -m app.main
 ```
-
-The older `ui.desktop_app` Tkinter prototype is retained as a reference, not the
-preferred desktop UI.
 
 ### Updating and troubleshooting
 
@@ -701,8 +748,8 @@ shortcut or launch the UI; the `PUB_CACHE` assignment applies to this shell.
 
 JARVIS uses allow-listed native tools and Python-enforced routing decisions.
 
-The normal native-tool path does not expose arbitrary shell execution to the
-model. The optional Open Interpreter adapter is a separate dynamic executor;
+The normal native-tool path does not expose arbitrary shell execution to
+Gemini. The optional Open Interpreter adapter is a separate dynamic executor;
 review its workspace, requested work, and confirmation carefully.
 
 ### Currently Allowed
@@ -711,6 +758,11 @@ review its workspace, requested work, and confirmation carefully.
 - Read CPU usage
 - Read RAM usage
 - Read NVIDIA GPU telemetry through the desktop API
+- Read local battery, network, and running-process status
+- Adjust volume, toggle mute, and control active media playback
+- Open declared Windows folders and selected Windows Settings pages
+- Lock, sleep, restart, or shut down Windows only after one explicit
+  confirmation
 - Discover projects from configured roots
 - List discovered projects
 - Read project metadata
@@ -770,6 +822,7 @@ __pycache__/
 Use example configuration files instead:
 
 ```text
+.env.example
 config/apps.example.json
 config/projects.example.json
 config/project_roots.example.json
@@ -780,9 +833,9 @@ config/project_roots.example.json
 ## Development Status
 
 JARVIS is an experimental Windows desktop assistant with a working Flutter UI,
-loopback API, native/read-only project tools, live telemetry, and guarded Open
-Interpreter delegation. Its former local-model loop has been removed. The
-ChatGPT UI and Codex executors remain planned integrations.
+loopback API, guarded native Windows tools, live telemetry, Gemini BYOK chat,
+and guarded Open Interpreter delegation. Its former local-model loop has been
+removed. The ChatGPT UI and Codex executors remain planned integrations.
 
 The current product foundation includes the desktop shortcut, Assistant / Tasks /
 Device / Settings / Errors pages, and session-only diagnostics. Voice input,
@@ -1049,10 +1102,11 @@ still planned. Loopback binding is not a substitute for a full permission model.
 
 #### Phase 1 — Safe Developer Workflow
 
-- [ ] Route every state-changing action through one Python permission gate.
+- [x] Route native state-changing actions through one Python permission gate.
 - [ ] Add direct Python/PowerShell execution for explicitly supported,
   low-risk operations.
 - [ ] Refine the existing on-demand Open Interpreter executor.
+- [x] Add Gemini BYOK understanding with Python-validated native tool calls.
 - [ ] Add a confirmation-gated ChatGPT UI executor without a GPT API.
 - [ ] Add a confirmation-gated Codex executor for heavy coding tasks.
 
@@ -1099,17 +1153,19 @@ Detailed acceptance criteria and later phases are maintained in the
 - Validate paths, workspaces, and tool arguments before execution.
 - Require confirmation for destructive, privileged, external, or
   state-changing actions.
-- Keep simple supported operations local and route reasoning through Codex.
+- Keep simple supported operations local and route cloud reasoning through the
+  selected BYOK provider.
 
 ---
 
 ## Reasoning Backends
 
 JARVIS intentionally has no local model runtime and no GPT API client. Its
-future reasoning integrations are the authenticated ChatGPT user interface for
-general questions/research and Codex for substantial coding work. Both must
-remain behind JARVIS routing, risk classification, and permission checks; they
-are never granted unrestricted computer control.
+current optional reasoning backend is Gemini BYOK. The API key remains in the
+user-local `.env`; Gemini can propose only the declared JARVIS tools, while
+Python applies routing, validation, and permission checks. Future ChatGPT UI
+and Codex integrations must preserve the same boundary and are never granted
+unrestricted computer control.
 
 ---
 
