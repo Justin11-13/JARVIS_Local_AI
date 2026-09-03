@@ -42,6 +42,7 @@ ENV/
 config/apps.json
 config/projects.json
 config/project_roots.json
+config/game_mode.json
 
 # Keep public example configs
 !config/apps.example.json
@@ -106,3 +107,6 @@ dist/
 
 AGENTS.md
 PROJECT_SCOPE.md
+
+data/rag/chroma/
+data/rag/index_manifest.json

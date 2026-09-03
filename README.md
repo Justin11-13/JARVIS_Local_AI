@@ -429,7 +429,7 @@ JARVIS_Local_AI/
 ├── tests/
 │
 ├── .gitignore
-├── dev.ps1
+├── dev.ps1                     # Python CLI auto-reload helper
 ├── run-desktop.ps1
 ├── create-desktop-shortcut.ps1
 ├── LICENSE
