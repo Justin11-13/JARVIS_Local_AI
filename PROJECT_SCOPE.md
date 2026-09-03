@@ -18,12 +18,12 @@ reliable, implemented capabilities are:
 - a desktop shortcut that starts the API with the app and stops the API instance
   it owns when the window closes.
 
-The desktop chat composer is **not** a natural-language tool router yet. It
-currently supports exact greetings and responses to an already-pending Open
-Interpreter confirmation. A CPU/RAM request typed into chat will not yet call
-the telemetry endpoint, and “打开 Chrome” will not yet call either the native
-`open_app` tool or Open Interpreter. The Device page and Assistant monitor show
-telemetry; application opening requires an explicit Core/API/router caller.
+The desktop chat composer supports exact local greetings, deterministic native
+intents, one pending-action confirmation, and optional Gemini BYOK reasoning.
+Gemini can propose only declared JARVIS tools; Python validates the name and
+arguments, then the permission manager decides whether the action can run. A
+general request never receives a shell, unrestricted Windows access, or the
+Gemini API key.
 
 ### Explicit exclusions / 明确排除
 
@@ -472,7 +472,7 @@ The notification service should later support:
 
 # 13. Current Main Runtime
 
-Current entry point:
+Current CLI entry point:
 
 python -m app.main
 
@@ -482,21 +482,32 @@ dev.ps1
 
 Development should use the project's virtual environment executables.
 
-The current main loop:
+Current desktop/API message flow:
 
-User input
+User
 ↓
-Codex executor (when configured)
-↓
-Action proposal / tool selection
-↓
-Python routing guards
-↓
-Tool execution
-↓
-Tool result returned to the requesting interface
-↓
-Final JARVIS response
+FastAPI chat endpoint
+├── Exact greeting → local reply
+├── Safe deterministic intent → native tool request
+└── General request → Gemini BYOK (when configured)
+                         ↓
+                  Declared tool proposal
+                         ↓
+             Python validation and TaskRouter
+                         ↓
+                 PermissionManager decision
+          ┌──────────────┴──────────────┐
+          ▼                             ▼
+   Low-risk native tool          High-risk native tool
+          ↓                             ↓
+       Execute                     One yes/no confirmation
+          └──────────────┬──────────────┘
+                         ▼
+                  Result returned to chat
+
+Gemini never executes Windows commands directly. It can make at most three
+validated local-tool requests for one user message. Open Interpreter remains a
+separate bounded executor with its own workspace and routing safeguards.
 
 
 # 14. Current Project Structure
@@ -514,9 +525,6 @@ JARVIS/
 │   ├── project_roots.json
 │   ├── projects.example.json
 │   └── projects.json
-│
-├── memory/
-│   └── __init__.py
 │
 ├── services/
 │   ├── __init__.py
@@ -547,8 +555,10 @@ JARVIS/
 
 Completed:
 
-- Native tools, TaskRouter, and Open Interpreter integration
-- agent tool loop
+- Native Core tool registry, TaskRouter, PermissionManager, and Open
+  Interpreter integration
+- Gemini BYOK adapter, session memory, and Python-validated tool proposals
+- explicit local API/Core tool entry points
 - Windows application discovery
 - open app
 - CPU / RAM
@@ -559,7 +569,7 @@ Completed:
 - read-only project file tools
 - Open Interpreter integration
 - Open Interpreter workspace validation
-- missing-information follow-up
+- Open Interpreter confirmation follow-up
 - Task Manager integration
 - task date / timestamps
 - duration tracking
@@ -576,35 +586,37 @@ Completed:
 
 # 16. Current Routing Boundary
 
-Open Interpreter routing policy is now centralized in:
+Python policy is centralized in:
 
 services/task_router.py
+services/permission_manager.py
 
-TaskRouter is responsible for:
+Gemini may interpret a user request and propose a declared local function, but
+it has no direct callable tool. `app/api.py` allow-lists every function and
+argument shape before it enters TaskRouter. PermissionManager then classifies
+the request:
 
-- routing mode
-- Open Interpreter risk classification
-- explicit user intent checks
-- policy enforcement
-- choosing Native vs Open Interpreter vs future Codex
-- deciding whether confirmation is required
+- low risk → execute the native allow-listed tool;
+- medium/high risk → retain the request and ask for one `yes`/`no` confirmation;
+- unsupported function, unsafe arguments, secret-file access, or unrestricted
+  execution → block it.
 
-app/main.py keeps the conversation loop, tool definitions, and terminal output.
-
-The next routing work should extend this boundary for future agents without
-weakening the existing native-tool and Open Interpreter guards.
-
-Target:
+Current route map:
 
 User
 ↓
-JARVIS Core
+JARVIS Core / FastAPI
 ↓
-TaskRouter
-├── Native
-├── Open Interpreter
-├── Codex
-└── Future Agents
+Native intent resolver or Gemini BYOK
+↓
+TaskRouter + PermissionManager
+├── Native Windows, system, project, Git, and file-read tools
+├── Open Interpreter on demand with workspace validation
+├── Codex (future specialist for coding work)
+└── Future agents
+
+The next routing work must preserve this Python-enforced boundary; a system
+prompt alone never grants any provider computer-control authority.
 
 
 # 17. Codex Integration — Future
