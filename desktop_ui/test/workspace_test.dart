@@ -19,7 +19,7 @@ class FakeApi extends JarvisApi {
     if (offline) throw const JarvisApiException('Core is offline.');
     return const JarvisHealth(
       status: 'ready',
-      model: 'qwen3:8b',
+      brain: 'codex',
       routingMode: 'manual',
     );
   }

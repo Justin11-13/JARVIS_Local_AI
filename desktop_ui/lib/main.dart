@@ -701,7 +701,7 @@ class _Header extends StatelessWidget {
           ListenableBuilder(
             listenable: monitor,
             builder: (context, _) => Text(
-              monitor.health?.model ?? 'Local model',
+              monitor.health?.brain ?? 'Codex',
               style: metadataStyle.copyWith(fontSize: 11),
             ),
           ),
@@ -844,7 +844,7 @@ class _RunView extends StatelessWidget {
         const SizedBox(height: 12),
         if (run.working)
           const Text(
-            'Processing with your existing model and routing policy.\nThe response and tool evidence will appear here.',
+            'Processing with the configured reasoning backend and routing policy.\nThe response and tool evidence will appear here.',
             style: TextStyle(
               color: ConsoleColors.muted,
               fontSize: 13,

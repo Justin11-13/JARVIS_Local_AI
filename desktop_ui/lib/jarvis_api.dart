@@ -19,7 +19,7 @@ class JarvisApi {
     final response = await _request('GET', '/api/health');
     return JarvisHealth(
       status: response['status'] as String? ?? 'unknown',
-      model: response['model'] as String? ?? 'unknown',
+      brain: response['brain'] as String? ?? 'unknown',
       routingMode: response['routing_mode'] as String? ?? 'unknown',
     );
   }
@@ -188,11 +188,11 @@ class GpuSample {
 class JarvisHealth {
   const JarvisHealth({
     required this.status,
-    required this.model,
+    required this.brain,
     required this.routingMode,
   });
   final String status;
-  final String model;
+  final String brain;
   final String routingMode;
 }
 

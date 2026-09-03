@@ -15,10 +15,9 @@ from pydantic import BaseModel, Field
 
 from app.main import (
     AVAILABLE_TOOLS,
-    MODEL,
-    SYSTEM_PROMPT,
-    TOOLS,
-    chat,
+    BRAIN_PROVIDER,
+    BRAIN_STATUS,
+    codex_not_configured_reply,
     task_manager,
     task_router,
 )
@@ -29,7 +28,20 @@ from services.system_telemetry import read_system_telemetry
 app = FastAPI(title="JARVIS Local API", version="0.1.0")
 
 _conversation_lock = Lock()
-_messages: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+# Pure greetings do not need a reasoning backend.
+FAST_REPLIES = {
+    "你好": "你好！我是 JARVIS。有什么可以帮你的吗？",
+    "您好": "您好！我是 JARVIS。有什么可以帮你的吗？",
+    "hi": "Hi! I am JARVIS. How can I help?",
+    "hello": "Hello! I am JARVIS. How can I help?",
+}
+
+
+def fast_reply(message: str) -> str | None:
+    """Return a local reply only for an exact, non-actionable greeting."""
+    normalized = " ".join(message.strip().lower().split())
+    return FAST_REPLIES.get(normalized)
 
 
 class ChatRequest(BaseModel):
@@ -67,10 +79,11 @@ def _execute_native_tool(function_name: str, arguments: dict[str, Any], user_inp
 
 @app.get("/api/health")
 def health() -> dict[str, Any]:
-    """Report API availability without contacting a model or tool."""
+    """Report API availability without contacting a reasoning backend or tool."""
     return {
         "status": "ready",
-        "model": MODEL,
+        "brain": BRAIN_PROVIDER,
+        "brain_status": BRAIN_STATUS,
         "routing_mode": task_router.routing_mode,
         "task_count": len(task_manager.list_tasks()),
     }
@@ -149,10 +162,16 @@ def refresh_projects() -> dict[str, Any]:
 
 @app.post("/api/chat")
 def chat_with_jarvis(request: ChatRequest) -> dict[str, Any]:
-    """Run the existing local-model tool loop behind the same routing policy."""
+    """Handle safe local replies and pending approvals during the migration."""
     user_input = request.message.strip()
+    reply = fast_reply(user_input)
+    if reply:
+        return {"reply": reply, "tool_results": []}
+
     with _conversation_lock:
-        handled, pending_message, pending_result = task_router.handle_pending_open_interpreter_confirmation(user_input)
+        handled, pending_message, pending_result = (
+            task_router.handle_pending_open_interpreter_confirmation(user_input)
+        )
         if handled:
             result = _serialize_tool_result(pending_result) if pending_result else None
             return {
@@ -160,42 +179,4 @@ def chat_with_jarvis(request: ChatRequest) -> dict[str, Any]:
                 "tool_results": [result] if result else [],
             }
 
-        _messages.append({"role": "user", "content": user_input})
-        tool_results: list[dict[str, Any]] = []
-
-        try:
-            for _ in range(10):
-                response = chat(model=MODEL, messages=_messages, tools=TOOLS, think=False)
-                _messages.append(response.message)
-                tool_calls = response.message.tool_calls
-
-                if not tool_calls:
-                    return {
-                        "reply": response.message.content or "No response was returned.",
-                        "tool_results": tool_results,
-                    }
-
-                for tool_call in tool_calls:
-                    result = task_router.execute_tool(
-                        function_name=tool_call.function.name,
-                        arguments=tool_call.function.arguments,
-                        user_input=user_input,
-                        available_tools=AVAILABLE_TOOLS,
-                    )
-                    serialized = _serialize_tool_result(result)
-                    serialized["tool_name"] = tool_call.function.name
-                    tool_results.append(serialized)
-                    _messages.append(
-                        {
-                            "role": "tool",
-                            "content": str(result),
-                            "tool_name": tool_call.function.name,
-                        }
-                    )
-        except Exception as error:  # Preserve the CLI's user-visible error boundary.
-            raise HTTPException(status_code=503, detail=f"JARVIS Core is unavailable: {error}") from error
-
-    return {
-        "reply": "The task exceeded the 10-step safety limit and was stopped.",
-        "tool_results": tool_results,
-    }
+    return {"reply": codex_not_configured_reply(), "tool_results": []}

@@ -18,14 +18,16 @@ Double-click **JARVIS** on the Windows desktop. The shortcut uses the virtual
 environment's `pythonw.exe` to launch the compiled Release app without a terminal,
 dependency downloads or recompilation. It reuses a healthy local API, or starts
 one on `127.0.0.1:8765` and waits up to 30 seconds for readiness before opening
-the window. It does not start Ollama; keep your existing Ollama setup running.
+the window. It does not start or load a local language model.
 Startup failures show a dialog; local launcher/API diagnostics are appended to
 `tmp/desktop-startup.log` (ignored by Git).
 
-The API stays in the background after the app closes, as with the development
-launcher. This does not add Windows startup/login behavior or a keyboard hotkey.
-Each activation opens an app window. Keep the repository and its build folder
-in place; this shortcut is not a standalone installer.
+When the shortcut starts the API, it owns that API process and stops it when the
+desktop app closes. A healthy API that was already running is reused and left
+alone, so another active JARVIS window is not disrupted. This does not add
+Windows startup/login behavior or a keyboard hotkey. Each activation opens an
+app window. Keep the repository and its build folder in place; this shortcut is
+not a standalone installer.
 
 After changing Flutter code, close the Release app and rerun
 `.\run-desktop.ps1 -BuildOnly -Release`. The desktop shortcut then uses the updated

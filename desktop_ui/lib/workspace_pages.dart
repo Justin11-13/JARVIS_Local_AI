@@ -632,7 +632,7 @@ class SettingsPage extends StatelessWidget {
               ),
               const SizedBox(height: 14),
               const Text(
-                'Read-only samples. No model calls or task-history entries. The chart keeps at most 60 samples in memory.',
+                'Read-only samples. No reasoning calls or task-history entries. The chart keeps at most 60 samples in memory.',
                 style: TextStyle(
                   fontSize: 12,
                   color: ConsoleColors.muted,
@@ -656,14 +656,14 @@ class SettingsPage extends StatelessWidget {
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 16),
-              RuntimeRow('Model', monitor.health?.model ?? 'Not available'),
+              RuntimeRow('Brain', monitor.health?.brain ?? 'Not available'),
               RuntimeRow(
                 'Routing',
                 monitor.health?.routingMode ?? 'Not available',
               ),
               const SizedBox(height: 12),
               const Text(
-                'Read from Core. Changing model or routing in this UI is not connected yet.',
+                'Read from Core. Changing the brain or routing in this UI is not connected yet.',
                 style: TextStyle(
                   color: ConsoleColors.muted,
                   fontSize: 12,

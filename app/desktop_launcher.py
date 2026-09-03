@@ -27,11 +27,51 @@ def api_ready() -> bool:
         return (
             isinstance(health, dict)
             and health.get("status") == "ready"
-            and isinstance(health.get("model"), str)
+            and isinstance(health.get("brain"), str)
             and isinstance(health.get("routing_mode"), str)
         )
     except (OSError, URLError, ValueError):
         return False
+
+
+def _start_api() -> subprocess.Popen:
+    """Start one loopback API process that this launcher owns."""
+    LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with LOG_PATH.open("ab") as log:
+        return subprocess.Popen(
+            [
+                sys.executable, "-m", "uvicorn", "app.api:app",
+                "--host", "127.0.0.1", "--port", "8765",
+            ],
+            cwd=ROOT,
+            stdin=subprocess.DEVNULL,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+
+
+def _wait_for_api(api: subprocess.Popen) -> None:
+    deadline = time.monotonic() + 30
+    while not api_ready():
+        if api.poll() is not None:
+            raise RuntimeError("The local API could not start. Check the startup log.")
+        if time.monotonic() >= deadline:
+            raise TimeoutError("The local API did not become ready within 30 seconds.")
+        time.sleep(0.25)
+
+
+def _stop_owned_api(api: subprocess.Popen) -> None:
+    """End only the API process that this launcher created."""
+    if api.poll() is not None:
+        return
+
+    api.terminate()
+    try:
+        api.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        api.kill()
+        api.wait(timeout=5)
 
 
 def launch() -> None:
@@ -41,35 +81,27 @@ def launch() -> None:
             ".\\run-desktop.ps1 -BuildOnly -Release"
         )
 
+    owned_api = None
     if not api_ready():
-        LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with LOG_PATH.open("ab") as log:
-            api = subprocess.Popen(
-                [
-                    sys.executable, "-m", "uvicorn", "app.api:app",
-                    "--host", "127.0.0.1", "--port", "8765",
-                ],
-                cwd=ROOT,
-                stdin=subprocess.DEVNULL,
-                stdout=log,
-                stderr=subprocess.STDOUT,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-            )
-        deadline = time.monotonic() + 30
-        while not api_ready():
-            if api.poll() is not None:
-                raise RuntimeError("The local API could not start. Check the startup log.")
-            if time.monotonic() >= deadline:
-                raise TimeoutError("The local API did not become ready within 30 seconds.")
-            time.sleep(0.25)
+        owned_api = _start_api()
+        try:
+            _wait_for_api(owned_api)
+        except Exception:
+            _stop_owned_api(owned_api)
+            raise
 
-    subprocess.Popen(
-        [str(DESKTOP_EXE)],
-        cwd=DESKTOP_EXE.parent,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    try:
+        desktop = subprocess.Popen(
+            [str(DESKTOP_EXE)],
+            cwd=DESKTOP_EXE.parent,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        desktop.wait()
+    finally:
+        if owned_api is not None:
+            _stop_owned_api(owned_api)
 
 
 def main() -> int:

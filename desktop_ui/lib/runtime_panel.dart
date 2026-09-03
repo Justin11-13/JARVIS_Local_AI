@@ -168,8 +168,8 @@ class RuntimePanel extends StatelessWidget {
                   const SizedBox(width: 16),
                   Expanded(
                     child: _RuntimeField(
-                      'Model',
-                      monitor.health?.model ?? 'Not available',
+                      'Brain',
+                      monitor.health?.brain ?? 'Not available',
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -183,7 +183,7 @@ class RuntimePanel extends StatelessWidget {
               )
             else ...[
               RuntimeRow('API', monitor.online ? 'Connected' : 'Not connected'),
-              RuntimeRow('Model', monitor.health?.model ?? 'Not available'),
+              RuntimeRow('Brain', monitor.health?.brain ?? 'Not available'),
               RuntimeRow(
                 'Routing',
                 monitor.health?.routingMode ?? 'Not available',
@@ -193,7 +193,7 @@ class RuntimePanel extends StatelessWidget {
             const Text('127.0.0.1:8765', style: metadataStyle),
             const SizedBox(height: 10),
             const Text(
-              'API connection does not verify model availability.',
+              'API connection does not verify reasoning-backend availability.',
               style: TextStyle(
                 fontSize: 11,
                 color: ConsoleColors.dim,

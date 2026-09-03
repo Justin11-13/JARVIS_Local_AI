@@ -1,7 +1,7 @@
 """A local-only Windows desktop shell for the JARVIS product roadmap.
 
-The UI is intentionally a presentation prototype.  It does not call Ollama,
-TaskRouter, or any system tool.  That boundary keeps the future API integration
+The UI is intentionally a presentation prototype. It does not call a reasoning
+backend, TaskRouter, or any system tool. That boundary keeps the future API integration
 safe: the UI can request an action, while JARVIS Core remains responsible for
 policy, routing, and execution.
 """
@@ -274,7 +274,7 @@ class DesktopApp:
         right.configure(highlightbackground=THEME.stroke)
         right.pack(side="left", fill="both", expand=True, padx=(7, 0))
 
-        self._setting_select(left, "Local model", "qwen3:8b", ("qwen3:8b", "Choose later"))
+        self._setting_select(left, "Reasoning backend", "Codex", ("Codex", "Choose later"))
         self._setting_select(left, "Routing mode", "automatic", ("manual", "ask", "automatic"))
         self._setting_select(left, "Notification channel", "desktop and terminal", ("desktop and terminal", "terminal only"))
         self._setting_toggle(right, "Reduce transparency", "Use stronger solid surfaces for easier reading.", self.reduce_transparency, self.apply_accessibility)
@@ -287,7 +287,7 @@ class DesktopApp:
         tk.Label(header, text="Local runtime", font=("Segoe UI Semibold", 15), fg=THEME.text, bg=THEME.surface).pack(anchor="w")
         tk.Label(header, text="UI preview · no core connection", font=("Segoe UI", 9), fg=THEME.muted, bg=THEME.surface).pack(anchor="w", pady=(4, 0))
 
-        self._runtime_row("Model", "qwen3:8b", "Planned connection", THEME.accent)
+        self._runtime_row("Brain", "Codex", "Planned connection", THEME.accent)
         self._runtime_row("Safety", "TaskRouter policy", "Core owns decisions", THEME.success)
         self._runtime_row("Tasks", "No active tasks", "Future API feed", THEME.muted)
 

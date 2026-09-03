@@ -1,4 +1,3 @@
-ollama
 psutil
 nvidia-ml-py==13.610.43
 pydantic

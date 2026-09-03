@@ -1,23 +1,27 @@
 # JARVIS Local AI Assistant
 
-JARVIS is an open-source, local-first Windows AI assistant with a native Flutter
-desktop app, local models through Ollama, and policy-controlled tools.
+JARVIS is an open-source, local-first Windows desktop foundation with a native
+Flutter app, a loopback API, policy-controlled local tools, and live hardware
+monitoring. It is not yet a general-purpose chat assistant.
 
-Chat in Chinese or English, open Windows applications, inspect your development
-projects, and watch live CPU, memory, and NVIDIA GPU readings in one workspace.
+Use the Desktop app to watch live CPU, memory, and NVIDIA GPU readings. Its
+local API exposes explicit, safe project/system operations for integrations.
 Once built, launch it from a desktop icon without opening a terminal or
 recompiling the app.
 
-The default model is **qwen3:8b**. The normal local workflow does not require a
-paid cloud-model API. Open Interpreter is an optional executor; Python routing
-policy, not the model's prompt alone, governs tool execution.
+JARVIS does not load a local language model and does not use a GPT API. General
+natural-language reasoning, ChatGPT UI delegation, and Codex delegation are not
+implemented yet. Python policy—not an AI prompt alone—governs the local tools
+and the existing Open Interpreter integration.
 
-**Status:** working Windows desktop foundation, under active development.
-Voice, wake word, a desktop companion, and persistent history are not implemented.
+**Status:** working desktop/API/telemetry foundation, under active development.
+Free-form task chat, voice, wake word, a desktop companion, and persistent
+history are not implemented.
 
 [Screenshots](#desktop-preview) · [Installation](#installation) ·
 [Features](#current-features) · [Security](#security-model) ·
-[Master plan](#product-master-plan) · [Desktop guide](desktop_ui/README.md)
+[Implementation plan](docs/chatgpt-codex-implementation-plan.md) ·
+[Desktop guide](desktop_ui/README.md)
 
 ## Desktop Preview
 
@@ -47,10 +51,10 @@ response times are examples from that session, not performance benchmarks.
 
 | Page | Available now |
 | --- | --- |
-| Assistant | Local-model chat, expandable tool results, a compact multiline composer, and a system-monitor side panel on wider windows. |
+| Assistant | Chat UI shell, local greeting replies, pending Open Interpreter confirmation replies, and a system-monitor side panel on wider windows. Free-form requests are not executed yet. |
 | Tasks | Requests and results from the current UI session. |
 | Device | Live CPU, memory, NVIDIA GPU, and local runtime status. |
-| Settings | Session-only appearance and monitoring controls; model/routing information is read-only. |
+| Settings | Session-only appearance and brain/routing information is read-only. |
 | Errors | Session-only diagnostics, occurrence counts, error details, copy, and confirmed clear. |
 
 - Steel/cyan interface with responsive layouts and shared visual components.
@@ -65,45 +69,57 @@ Conversation history, the UI task list, error reports, and UI preferences are
 not yet persisted across app sessions. See the [desktop guide](desktop_ui/README.md)
 for detailed behavior and limits.
 
-### Local AI
+### What Works Now / 现在能做什么
 
-- Local AI through Ollama
-- Qwen3 8B as the current default model
-- No GPT API required
-- No Codex required
-- Chinese and English natural-language interaction
+- **Desktop monitoring / 桌面监控:** the Device page and Assistant side panel
+  poll the local API for CPU utilisation, physical memory, and supported NVIDIA
+  GPU metrics. This does not need an AI backend.
+- **Local API / 本地 API:** explicit endpoints provide system information,
+  project listing, registered-project Git status, file listing, file reading,
+  file search, and a user-requested project-registry refresh.
+- **Native Python tools / 原生 Python 工具:** the Core contains application
+  discovery/opening, system information, project discovery, Git status, and
+  registered-project read-only file tools. For example, `open_app("Chrome")`
+  finds a Start Menu shortcut and opens it. These are callable through explicit
+  Core/API interfaces, not inferred from arbitrary chat text.
+- **Open Interpreter safety foundation / 安全基础:** workspace validation,
+  manual/ask/automatic modes, risk classification, confirmation, task records,
+  and notifications are implemented. When explicitly invoked through the
+  router and available on PATH, it can run a bounded local task such as opening
+  an application; the Desktop chat does not yet create a new Open Interpreter
+  task from free-form text.
+- **Chat / 聊天:** exact greetings such as `hello` and `你好` receive a local
+  reply. The chat endpoint also accepts `yes`/`no` only for an Open Interpreter
+  task that was already created through an explicit interface.
+- **Desktop startup / 桌面启动:** the provided shortcut starts or reuses the
+  loopback API, opens the Release UI, and stops only the API instance it started
+  when that window closes.
 
-### Multi-Step Agent Loop
+### Not Available Yet / 现在还不能做
 
-JARVIS can complete requests that require multiple tool calls.
+- A free-form message such as “Show my current CPU and memory usage” or “打开
+  Chrome” is **not** routed to a native/Open Interpreter tool from the chat
+  composer yet. Open Device or the Assistant side panel to view telemetry;
+  Chrome requires an explicit native/Open Interpreter caller today.
+- Codex, ChatGPT UI, and automatic natural-language tool selection are not
+  configured. JARVIS deliberately returns an unavailable message instead of
+  pretending that work was completed.
+- No Ollama, Qwen, other local model, GPT API, automatic browser control,
+  unrestricted PowerShell, file-writing chat workflow, or autonomous computer
+  control is available.
 
-Example:
+The intended, not-yet-implemented direction is documented in the bilingual
+[implementation plan](docs/chatgpt-codex-implementation-plan.md).
 
-```text
-打开 FYP，然后检查它的 Git status
-```
+### Current Chat Boundary / 当前聊天边界
 
-Possible flow:
+The Assistant composer is present, but it is not connected to a reasoning
+executor. It cannot currently infer that “Show my current CPU and memory usage”
+should call a local tool. That is why the screenshot receives the Codex-not-
+configured response even while the CPU/RAM panel is capable of showing live
+data. This is an intentional migration boundary, not a telemetry failure.
 
-```text
-User
-  ↓
-Qwen3 8B
-  ↓
-open_project
-  ↓
-Tool result
-  ↓
-git_status
-  ↓
-Tool result
-  ↓
-Final response
-```
-
-The agent loop also has a maximum step limit to reduce the risk of uncontrolled loops.
-
-### Windows Application Discovery
+### Native Application Discovery
 
 JARVIS can automatically discover many installed Windows applications through Start Menu shortcuts.
 
@@ -116,7 +132,7 @@ Current capabilities include:
 - Fuzzy application-name matching
 - Automatically refresh the registry when an application is not found
 
-Example commands:
+Examples for an explicit native-tool caller:
 
 ```text
 打开 Chrome
@@ -143,8 +159,9 @@ does not call the language model or create tasks.
 - Polling pauses while the app is minimized; requests do not overlap.
 - Unsupported GPU metrics show N/A. AMD/Intel GPU monitoring is not implemented.
 
-The native conversation tool also reports CPU and RAM usage. Monitoring is
-lightweight but not free; pause it or use a slower interval on battery power.
+The chat composer does not currently route CPU/RAM questions to this API.
+Monitoring is lightweight but not free; pause it or use a slower interval on
+battery power.
 
 Example:
 
@@ -318,9 +335,9 @@ This avoids manually restarting JARVIS after every code change.
 ## Architecture
 
 The Flutter desktop connects to `app/api.py` on `127.0.0.1:8765`. The FastAPI
-service and terminal CLI reuse the same Core conversation loop, tools, and
-`services/task_router.py` policy. System telemetry is a separate read-only
-API path and does not enter the model loop.
+service and terminal CLI reuse the same Core tool registry and
+`services/task_router.py` policy. System telemetry is a separate read-only API
+path and does not enter a reasoning flow.
 
 Core tool flow:
 
@@ -328,10 +345,10 @@ Core tool flow:
                          User
                           │
                           ▼
-                     Qwen3 8B
+              Codex executor (planned)
                           │
                           ▼
-                 JARVIS Agent Loop
+                  Action proposal
                           │
                           ▼
                      Tool Router
@@ -426,7 +443,6 @@ For the Windows desktop source build:
 - Windows 11 (current development platform)
 - Python 3 with pip
 - Git
-- [Ollama for Windows](https://docs.ollama.com/windows) and the `qwen3:8b` model
 - Flutter SDK; the current build uses Flutter 3.44.9 / Dart 3.12.2
 - Visual Studio with the **Desktop development with C++** workload, not just
   Visual Studio Code; see [Flutter's Windows setup guide](https://docs.flutter.dev/platform-integration/windows/setup)
@@ -461,20 +477,7 @@ python -m venv .venv
 
 The commands use the virtual environment directly; activation is optional.
 
-### 3. Prepare the local model
-
-Install and start [Ollama for Windows](https://docs.ollama.com/windows), then pull
-and check the default model:
-
-```powershell
-ollama pull qwen3:8b
-ollama list
-```
-
-Keep Ollama running while using chat. The JARVIS desktop shortcut starts the
-JARVIS API, not Ollama. A connected API indicator does not verify model availability.
-
-### 4. Configure project scan roots (optional)
+### 3. Configure project scan roots (optional)
 
 For project tools, create a local configuration without replacing an existing one:
 
@@ -565,11 +568,12 @@ preferred desktop UI.
   desktop window does not reload a running backend.
 - **Shortcut cannot start:** check the error dialog and `tmp/desktop-startup.log`.
   For build diagnostics, run `.\run-desktop.ps1 -BuildOnly` in PowerShell.
-- **API connected, chat unavailable:** check that Ollama is running and
-  `ollama list` includes `qwen3:8b`.
+- **API connected, reasoning unavailable:** configure the Codex executor when
+  that migration phase is complete.
 
-Closing the UI does not stop the background API. The shortcut does not add
-Windows login startup or a keyboard hotkey. More details are in the
+When the shortcut starts the API, closing that desktop window stops the API too.
+An API that was already running is reused and is not stopped by this shortcut.
+The shortcut does not add Windows login startup or a keyboard hotkey. More details are in the
 [desktop guide](desktop_ui/README.md).
 
 ---
@@ -776,8 +780,9 @@ config/project_roots.example.json
 ## Development Status
 
 JARVIS is an experimental Windows desktop assistant with a working Flutter UI,
-loopback API, local-model tool loop, read-only project tools, live telemetry,
-and guarded Open Interpreter delegation.
+loopback API, native/read-only project tools, live telemetry, and guarded Open
+Interpreter delegation. Its former local-model loop has been removed. The
+ChatGPT UI and Codex executors remain planned integrations.
 
 The current product foundation includes the desktop shortcut, Assistant / Tasks /
 Device / Settings / Errors pages, and session-only diagnostics. Voice input,
@@ -790,9 +795,10 @@ It is not yet intended to provide unrestricted autonomous control of a computer.
 
 ## Product Master Plan
 
-This section describes the intended product direction. A feature marked
-**Planned** is not available yet. Existing features remain deliberately
-conservative while the broader permission system is built.
+This section is a short product overview. The authoritative delivery sequence
+is the bilingual [ChatGPT UI + Codex implementation plan](docs/chatgpt-codex-implementation-plan.md).
+A feature marked **Planned** is not available yet. Existing features remain
+deliberately conservative while the broader permission system is built.
 
 ### Product Vision
 
@@ -831,8 +837,8 @@ Notify user
                             │
         ┌───────────────────┼───────────────────┐
         ▼                   ▼                   ▼
-   Native Tools         Local AI          Specialist Agents
-   Windows / APIs       Ollama / Qwen     Open Interpreter / Codex
+  Python / PowerShell    ChatGPT UI        Specialist Executors
+  Native small tasks       + Codex          Open Interpreter (on demand)
                             │
                       Permission Layer
                             │
@@ -841,14 +847,16 @@ Notify user
                   Monitor and Notification
 ~~~
 
-**Implemented foundation:** local Qwen through Ollama, the conversation loop,
-native tools, TaskRouter, TaskManager, terminal notifications, Open Interpreter
-routing safeguards, a loopback FastAPI service, and the Flutter desktop app with
-live telemetry, session diagnostics, and a desktop shortcut.
+**Implemented foundation:** native tools, TaskRouter, TaskManager, terminal
+notifications, Open Interpreter routing safeguards, a loopback FastAPI service,
+and the Flutter desktop app with live telemetry, session diagnostics, and a
+desktop shortcut. The local-model conversation loop has been removed.
 
-**Planned:** voice, advanced/persistent settings, system tray and lifecycle
-controls, browser control, hardware control integrations, and optional
-cloud-model providers. NVIDIA telemetry is available; hardware control is not.
+**Planned:** the permission boundary for every executor, authenticated ChatGPT
+UI hand-off/result collection, Codex hand-off for coding tasks, voice,
+advanced/persistent settings, system tray and lifecycle controls, browser
+control, and hardware-control integrations. NVIDIA telemetry is available;
+hardware control is not.
 
 ### Brain, Models, and Executors
 
@@ -857,22 +865,23 @@ system access; Python policy decides what is actually allowed.
 
 | Component | Role | Current status |
 | --- | --- | --- |
-| Local Qwen via Ollama | Conversation, intent understanding, simple reasoning, and tool selection. | Implemented; default model is qwen3:8b. |
-| Native JARVIS tools | Small supported actions such as opening apps, reading system information, project inspection, Git status, and read-only file access. | Implemented. |
-| Open Interpreter | General local workflows and multi-file execution beyond native-tool coverage. | Implemented with explicit workspace validation, risk classification, and manual / ask / automatic modes. |
-| Codex or another cloud provider | Heavy software-engineering work such as repository-wide debugging, refactoring, and implementation/test loops. | Planned and optional. |
-| Future specialist agents | Clearly scoped capabilities such as browser or hardware control. | Planned. |
+| Native Python / PowerShell tools | Small supported actions such as opening apps, reading system information, project inspection, Git status, and read-only file access. | Implemented foundation; permission coverage is being expanded. |
+| Open Interpreter | On-demand bounded local execution when native tools are insufficient. | Implemented with explicit workspace validation, risk classification, and manual / ask / automatic modes. |
+| ChatGPT UI executor | Broader questions, web-assisted research, and visible-result collection through the authenticated ChatGPT interface. | Planned; no GPT API. |
+| Codex executor | Repository-scale coding, debugging, implementation, tests, and action proposals. | Planned; no unconfigured request is executed. |
 
 Intended model routing:
 
 ~~~text
-Simple or normal work        → Local Qwen + Native tools
-General local workflows      → Open Interpreter when policy allows
-Heavy coding work            → Optional Codex or another specialist
+Small supported work         → Native Python / PowerShell tool
+Bounded local workflow       → Open Interpreter when policy allows
+Question / research          → ChatGPT UI executor when configured
+Heavy coding / repo work     → Codex executor when configured
 ~~~
 
-Normal usage should remain local-first. Cloud models are an optional
-enhancement, not a requirement.
+Local execution remains the default for supported Windows operations. ChatGPT
+and Codex must remain behind the routing and permission boundary; they may
+propose actions but cannot bypass Python policy.
 
 ### Computer, Application, Browser, and Project Control
 
@@ -972,7 +981,8 @@ classification; and confirmation for medium/high-risk automatic work.
 
 **Planned safeguards:** the full locked/restricted/trusted state model,
 credential protection, file-write permissions, terminal/PowerShell policy,
-Git commit/push approval, and external-message approval.
+Git commit/push approval, and explicit approval before a request or attachment
+is submitted to ChatGPT or another external service.
 
 ### Task Lifecycle and Notifications
 
@@ -1014,8 +1024,8 @@ Tools / Models / Agents
 
 Current endpoints include:
 
-- `GET /api/health` — API status and configured model/routing information;
-  does not contact the model.
+- `GET /api/health` — API status and configured brain/routing information;
+  does not contact a reasoning backend.
 - `GET /api/telemetry` — read-only CPU, memory, and NVIDIA GPU counters.
 - `POST /api/chat` — conversation and tool execution through Core/TaskRouter.
 - `GET /api/projects` and the `/api/projects/...` actions — registered-project
@@ -1029,7 +1039,8 @@ still planned. Loopback binding is not a substitute for a full permission model.
 
 #### Phase 0 — Current Foundation
 
-- [x] Ollama + qwen3:8b, agent tool loop, and native application/system tools.
+- [x] Native application/system tools, project tools, and routing safeguards.
+- [x] Local-model dependencies and runtime loop removed.
 - [x] Project discovery, project registry, Git status, and read-only project
   file tools.
 - [x] Open Interpreter adapter, workspace validation, risk routing, pending
@@ -1038,12 +1049,15 @@ still planned. Loopback binding is not a substitute for a full permission model.
 
 #### Phase 1 — Safe Developer Workflow
 
-- [ ] Git diff and project diagnostics.
-- [ ] Run tests for registered projects and report results.
-- [ ] Safe file creation and code modification with confirmation.
-- [ ] Code review and bounded test-and-fix workflows.
-- [ ] Explicit Git commit and Git push approval flows.
-- [ ] Optional Codex adapter for heavy coding tasks.
+- [ ] Route every state-changing action through one Python permission gate.
+- [ ] Add direct Python/PowerShell execution for explicitly supported,
+  low-risk operations.
+- [ ] Refine the existing on-demand Open Interpreter executor.
+- [ ] Add a confirmation-gated ChatGPT UI executor without a GPT API.
+- [ ] Add a confirmation-gated Codex executor for heavy coding tasks.
+
+Detailed acceptance criteria and later phases are maintained in the
+[implementation plan](docs/chatgpt-codex-implementation-plan.md).
 
 #### Phase 2 — Full Permission Boundary
 
@@ -1059,7 +1073,7 @@ still planned. Loopback binding is not a substitute for a full permission model.
 - [x] Live CPU/RAM/NVIDIA GPU monitoring and a status dashboard.
 - [x] Session-only appearance/monitor preferences and error diagnostics.
 - [x] Release build and one-click desktop shortcut.
-- [ ] Persistent and editable model, routing, project, and agent settings.
+- [ ] Persistent and editable brain, routing, project, and agent settings.
 - [ ] System tray, backend lifecycle controls, and Windows notifications.
 
 #### Phase 4 — Voice and Multimodal Interaction
@@ -1085,41 +1099,17 @@ still planned. Loopback binding is not a substitute for a full permission model.
 - Validate paths, workspaces, and tool arguments before execution.
 - Require confirmation for destructive, privileged, external, or
   state-changing actions.
-- Keep local AI as the default path whenever practical.
+- Keep simple supported operations local and route reasoning through Codex.
 
 ---
 
-## AI Model
+## Reasoning Backends
 
-The current default model is:
-
-```text
-Qwen3 8B
-```
-
-running locally through Ollama.
-
-The architecture is designed so the underlying model can be replaced in the future without rewriting the entire tool system.
-
-Possible future model routing:
-
-```text
-Fast Model
-  ↓
-Simple commands and routing
-
-Main Model
-  ↓
-Conversation and tool usage
-
-Deep Model
-  ↓
-Complex reasoning and development tasks
-
-Vision Model
-  ↓
-Screenshot and image understanding
-```
+JARVIS intentionally has no local model runtime and no GPT API client. Its
+future reasoning integrations are the authenticated ChatGPT user interface for
+general questions/research and Codex for substantial coding work. Both must
+remain behind JARVIS routing, risk classification, and permission checks; they
+are never granted unrestricted computer control.
 
 ---
 

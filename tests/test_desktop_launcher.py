@@ -27,8 +27,9 @@ class DesktopLauncherTests(unittest.TestCase):
             self.addCleanup(patcher.stop)
 
     def test_existing_api_launches_only_the_compiled_app(self):
+        desktop = MagicMock()
         with patch.object(launcher, "api_ready", return_value=True), patch.object(
-            launcher.subprocess, "Popen"
+            launcher.subprocess, "Popen", return_value=desktop
         ) as start:
             launcher.launch()
         start.assert_called_once_with(
@@ -38,26 +39,30 @@ class DesktopLauncherTests(unittest.TestCase):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+        desktop.wait.assert_called_once_with()
         self.assertFalse(self.log.exists())
 
-    def test_cold_start_waits_for_api_and_stays_on_loopback(self):
+    def test_cold_start_stops_its_api_when_the_desktop_app_closes(self):
         api = MagicMock()
         api.poll.return_value = None
+        desktop = MagicMock()
         with patch.object(launcher, "api_ready", side_effect=[False, False, True]), patch.object(
-            launcher.subprocess, "Popen", return_value=api
+            launcher.subprocess, "Popen", side_effect=[api, desktop]
         ) as start, patch.object(launcher.time, "sleep") as sleep:
             launcher.launch()
         self.assertEqual(start.call_count, 2)
-        backend, desktop = start.call_args_list
+        backend, desktop_call = start.call_args_list
         self.assertEqual(backend.args[0], [
             launcher.sys.executable, "-m", "uvicorn", "app.api:app",
             "--host", "127.0.0.1", "--port", "8765",
         ])
         self.assertEqual(backend.kwargs["cwd"], self.root)
         self.assertEqual(backend.kwargs["creationflags"], subprocess.CREATE_NO_WINDOW)
-        self.assertEqual(desktop.args[0], [str(self.executable)])
+        self.assertEqual(desktop_call.args[0], [str(self.executable)])
         sleep.assert_called_once_with(0.25)
-        api.terminate.assert_not_called()
+        desktop.wait.assert_called_once_with()
+        api.terminate.assert_called_once_with()
+        api.wait.assert_called_once_with(timeout=5)
 
     def test_api_exit_does_not_open_an_offline_window(self):
         api = MagicMock()
@@ -78,6 +83,7 @@ class DesktopLauncherTests(unittest.TestCase):
         ):
             launcher.launch()
         self.assertEqual(start.call_count, 1)
+        api.terminate.assert_called_once_with()
 
     def test_missing_build_does_not_start_the_backend(self):
         with patch.object(launcher, "DESKTOP_EXE", self.root / "missing.exe"), patch.object(
@@ -98,7 +104,7 @@ class DesktopLauncherTests(unittest.TestCase):
 
     def test_health_requires_a_jarvis_shaped_response(self):
         for body, expected in (
-            (b'{"status":"ready","model":"qwen3:8b","routing_mode":"ask"}', True),
+            (b'{"status":"ready","brain":"codex","routing_mode":"ask"}', True),
             (b'{"status":"ready"}', False),
             (b'[]', False),
             (b'not json', False),
