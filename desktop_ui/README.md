@@ -106,9 +106,18 @@ confirmation flow. Keyboard submission sends once; suggestions fill the composer
 executing anything. Tasks lists this UI session only, not the entire Core history.
 The UI does not fake token streaming, a live stop button or model liveness.
 
-Voice, wake word, floating companion and model/routing settings are marked as
-planned or read-only. Appearance/monitor preferences last for this app session.
-The permission preview is a demonstration and never authorizes execution.
+Use **Read reply** beside a completed Assistant response with the session voice
+provider selected in Settings. **Windows system voice** follows the voice and
+speed selected in Windows Speech settings on every read, displays that live
+selection in JARVIS Settings, and keeps text on this device. **Fish Audio cloud** sends only that reply
+text to Fish Audio after the user selects it; its API key is read only from the
+local `.env` file and is never placed in Flutter. Neither provider enters
+TaskRouter, receives computer-execution authority, or includes, clones or
+imitates the copyrighted *Iron Man* JARVIS character voice.
+Voice input, wake word, floating companion and model/routing settings remain
+explicitly planned or read-only. Appearance/monitor preferences last for this
+app session. The permission preview is a demonstration and never authorizes
+execution.
 
 ## Checks
 

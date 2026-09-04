@@ -8,10 +8,10 @@ cannot turn JARVIS tools into a network service.
 from __future__ import annotations
 
 import re
-from threading import Lock
+from threading import Lock, Timer
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from app.main import (
@@ -26,10 +26,10 @@ from app.main import (
     task_router,
 )
 from services.native_intent import resolve_native_intent
-from services.rag.indexer import update_index
-from services.rag.rag_service import RAGService
 from services.rag.knowledge_router import should_use_rag
 from services.system_telemetry import read_system_telemetry
+from services.fish_speech_service import FishSpeechError, FishSpeechService
+from services.windows_speech_service import WindowsSpeechError, WindowsSpeechService
 from skills.project import load_projects
 
 
@@ -46,42 +46,64 @@ app = FastAPI(
 @app.on_event("startup")
 def initialize_rag_index() -> None:
     """
-    Synchronize the local knowledge base when JARVIS starts.
+    Prepare the local knowledge base after the API is already able to start.
 
-    The incremental indexer skips unchanged documents and only processes
-    new, modified, or deleted knowledge files.
+    A short delay lets the desktop UI connect without waiting for the heavy
+    embedding runtime. RAG requests still wait safely for this same one-time
+    preparation when they arrive before the background warm-up finishes.
     """
-    try:
-        update_index()
-    except Exception as error:
-        print(
-            f"[RAG] Knowledge index update failed: {error}"
-        )
+    warmup = Timer(1.0, _warm_rag_service)
+    warmup.daemon = True
+    warmup.start()
 
 
 _conversation_lock = Lock()
 
 _rag_lock = Lock()
-_rag_service: RAGService | None = None
+_rag_service: Any | None = None
+_rag_index_ready = False
 
 
-def _get_rag_service() -> RAGService:
+def _get_rag_service() -> Any:
     """
-    Lazily initialize and reuse the RAG service.
+    Synchronize the index, then initialize and reuse the RAG service.
 
-    The local embedding model is loaded only when RAG retrieval is first
-    required instead of every time the API starts.
+    Indexing and retrieval share one lock and one embedding model, preventing
+    duplicate cold loads when a request overlaps background preparation.
     """
-    global _rag_service
+    global _rag_index_ready, _rag_service
 
-    if _rag_service is not None:
+    if _rag_service is not None and _rag_index_ready:
         return _rag_service
 
     with _rag_lock:
+        if not _rag_index_ready:
+            try:
+                from services.rag.indexer import update_index
+
+                update_index()
+            except Exception as error:
+                print(
+                    f"[RAG] Knowledge index update failed: {error}"
+                )
+            finally:
+                _rag_index_ready = True
+
         if _rag_service is None:
+            from services.rag.rag_service import RAGService
+
             _rag_service = RAGService()
 
     return _rag_service
+
+
+def _warm_rag_service() -> None:
+    """Warm RAG in the background without blocking desktop startup."""
+    try:
+        _get_rag_service()
+        print("[RAG] Background warm-up completed.")
+    except Exception as error:
+        print(f"[RAG] Background warm-up failed: {error}")
 
 
 # ---------------------------------------------------------------------------
@@ -89,22 +111,55 @@ def _get_rag_service() -> RAGService:
 # ---------------------------------------------------------------------------
 
 FAST_REPLIES = {
-    "你好": "你好！我是 JARVIS。有什么可以帮你的吗？",
-    "您好": "您好！我是 JARVIS。有什么可以帮你的吗？",
+    "你好": "你好！我是 JARVIS。有什么可以帮你？",
+    "您好": "你好！我是 JARVIS。有什么可以帮你？",
     "hi": "Hi! I am JARVIS. How can I help?",
     "hello": "Hello! I am JARVIS. How can I help?",
+    "你能做什么": (
+        "我可以检查 CPU、内存和 GPU 状态，控制音量与媒体播放，打开已安装的应用，"
+        "查看已注册项目、Git 状态和项目文件，并在敏感系统操作前请求确认。"
+    ),
+    "你可以做什么": (
+        "我可以检查 CPU、内存和 GPU 状态，控制音量与媒体播放，打开已安装的应用，"
+        "查看已注册项目、Git 状态和项目文件，并在敏感系统操作前请求确认。"
+    ),
+    "what can you do": (
+        "I can check CPU, memory, and GPU status; control volume and media playback; "
+        "open installed apps; inspect registered projects, Git status, and project files; "
+        "and request confirmation before sensitive system actions."
+    ),
 }
+
+FAST_SPEECH_REPLIES = {
+    "你好": "Hello! I am JARVIS. How can I help?",
+    "您好": "Hello! I am JARVIS. How can I help?",
+    "你能做什么": (
+        "I can check CPU, memory, and GPU status, control volume and media playback, "
+        "open installed apps, inspect registered projects, Git status, and project files, "
+        "and request confirmation before sensitive system actions."
+    ),
+    "你可以做什么": (
+        "I can check CPU, memory, and GPU status, control volume and media playback, "
+        "open installed apps, inspect registered projects, Git status, and project files, "
+        "and request confirmation before sensitive system actions."
+    ),
+}
+
+
+def _normalized_fast_reply(message: str) -> str:
+    return " ".join(message.strip().lower().split()).rstrip("?!？！。")
 
 
 def fast_reply(message: str) -> str | None:
     """
     Return a local reply only for an exact, non-actionable greeting.
     """
-    normalized = " ".join(
-        message.strip().lower().split()
-    )
+    return FAST_REPLIES.get(_normalized_fast_reply(message))
 
-    return FAST_REPLIES.get(normalized)
+
+def fast_speech_reply(message: str) -> str | None:
+    """Return the English narration for a fixed local reply when available."""
+    return FAST_SPEECH_REPLIES.get(_normalized_fast_reply(message))
 
 
 # ---------------------------------------------------------------------------
@@ -113,6 +168,13 @@ def fast_reply(message: str) -> str | None:
 
 class ChatRequest(BaseModel):
     message: str = Field(
+        min_length=1,
+        max_length=12_000,
+    )
+
+
+class SpeechRequest(BaseModel):
+    text: str = Field(
         min_length=1,
         max_length=12_000,
     )
@@ -199,6 +261,49 @@ def _execute_native_tool(
         serialized["status"] = "completed"
 
     return serialized
+
+
+# Fish Audio output is a user-selected cloud request only. It is deliberately
+# outside TaskRouter: speech synthesis cannot perform tools or receive authority.
+_fish_speech_service = FishSpeechService()
+_windows_speech_service = WindowsSpeechService()
+
+
+@app.post("/api/speech")
+def synthesize_speech(request: SpeechRequest) -> Response:
+    try:
+        audio = _fish_speech_service.synthesize(request.text.strip())
+    except FishSpeechError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+    return Response(
+        content=audio,
+        media_type="audio/wav",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.post("/api/system-speech", status_code=204)
+def speak_with_windows_voice(request: SpeechRequest) -> Response:
+    try:
+        _windows_speech_service.speak(request.text.strip())
+    except WindowsSpeechError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    return Response(status_code=204)
+
+
+@app.get("/api/system-speech/settings")
+def windows_speech_settings() -> dict[str, Any]:
+    try:
+        return _windows_speech_service.settings()
+    except WindowsSpeechError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+@app.post("/api/system-speech/stop", status_code=204)
+def stop_windows_voice() -> Response:
+    _windows_speech_service.stop()
+    return Response(status_code=204)
 
 
 # ---------------------------------------------------------------------------
@@ -578,23 +683,61 @@ def _redact_gemini_tool_result(
 # Chat/session helpers
 # ---------------------------------------------------------------------------
 
+DISPLAY_MARKER = "[DISPLAY]"
+VOICE_MARKER = "[VOICE_EN]"
+
+
+def plain_display_text(value: str) -> str:
+    """Remove Markdown decoration from prose while preserving fenced code."""
+    parts = value.split("```")
+
+    for index in range(0, len(parts), 2):
+        prose = parts[index]
+        prose = re.sub(r"(?m)^\s*#{1,6}\s+", "", prose)
+        prose = re.sub(r"(?m)^\s*\*\s+", "• ", prose)
+        prose = re.sub(r"\*{2,3}(.+?)\*{2,3}", r"\1", prose)
+        prose = re.sub(r"_{2,3}(.+?)_{2,3}", r"\1", prose)
+        parts[index] = prose
+
+    return "```".join(parts)
+
+
+def split_reply_for_speech(reply: str) -> tuple[str, str]:
+    """Keep the user's display language separate from an English narration."""
+    display, separator, narration = reply.partition(VOICE_MARKER)
+    if not separator:
+        cleaned_reply = plain_display_text(reply.strip())
+        return cleaned_reply, cleaned_reply
+    if display.lstrip().startswith(DISPLAY_MARKER):
+        display = display.lstrip()[len(DISPLAY_MARKER) :]
+    cleaned_display = plain_display_text(display.strip())
+    cleaned_narration = narration.strip()
+    return cleaned_display, cleaned_narration or cleaned_display
+
+
 def _chat_response(
     user_input: str,
     reply: str,
     tool_results: list[dict[str, Any]],
+    speech_reply: str | None = None,
 ) -> dict[str, Any]:
     """
     Return the API response and retain the completed
     turn in local session memory.
     """
 
+    display_reply, embedded_speech_reply = split_reply_for_speech(reply)
+    narration = (speech_reply or embedded_speech_reply).strip()
+
     jarvis_memory.remember(
         user_input,
-        reply,
+        display_reply,
+        narration,
     )
 
     return {
-        "reply": reply,
+        "reply": display_reply,
+        "speech": narration,
         "tool_results": tool_results,
     }
 
@@ -631,6 +774,12 @@ def system_info() -> dict[str, Any]:
         {},
         "Show local system status.",
     )
+
+
+@app.get("/api/chat/history")
+def chat_history() -> dict[str, Any]:
+    """Restore bounded conversation history from local persistent memory."""
+    return {"turns": jarvis_memory.history()}
 
 
 @app.get("/api/telemetry")
@@ -802,6 +951,7 @@ def chat_with_jarvis(
             user_input,
             reply,
             [],
+            speech_reply=fast_speech_reply(user_input),
         )
 
     with _conversation_lock:

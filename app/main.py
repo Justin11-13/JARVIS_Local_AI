@@ -6,6 +6,8 @@ local language model. Gemini is an optional BYOK cloud brain; any future Codex
 integration remains policy-controlled.
 """
 
+from pathlib import Path
+
 from services.agents.gemini import GeminiAdapter
 from services.agents.open_interpreter import OpenInterpreterAdapter
 from services.byok_config import load_byok_config
@@ -48,7 +50,16 @@ gemini = GeminiAdapter()
 BRAIN_STATUS = "unsupported" if byok_config.error else ("configured" if gemini.is_configured() else "not_configured")
 task_manager = TaskManager()
 notification_service = NotificationService()
-jarvis_memory = JarvisMemory()
+jarvis_memory = JarvisMemory(
+    max_turns=100,
+    context_turns=6,
+    storage_path=(
+        Path(__file__).resolve().parents[1]
+        / "data"
+        / "memory"
+        / "conversation.json"
+    ),
+)
 task_router = TaskRouter(
     routing_mode=OPEN_INTERPRETER_ROUTING_MODE,
     open_interpreter=open_interpreter,

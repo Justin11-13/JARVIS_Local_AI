@@ -110,3 +110,4 @@ PROJECT_SCOPE.md
 
 data/rag/chroma/
 data/rag/index_manifest.json
+data/memory/

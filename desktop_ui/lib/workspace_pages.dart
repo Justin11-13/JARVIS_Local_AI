@@ -4,11 +4,20 @@ import 'core_indicator.dart';
 import 'jarvis_api.dart';
 import 'runtime_monitor.dart';
 import 'runtime_panel.dart';
+import 'speech_controller.dart';
 
 class SessionRun {
-  SessionRun(this.prompt) : started = DateTime.now();
+  SessionRun(this.prompt) : started = DateTime.now(), restored = false;
+  SessionRun.restored({
+    required this.prompt,
+    required this.started,
+    required JarvisChatReply restoredReply,
+  }) : restored = true,
+       finished = started,
+       reply = restoredReply;
   final String prompt;
   final DateTime started;
+  final bool restored;
   DateTime? finished;
   JarvisChatReply? reply;
   String? error;
@@ -19,6 +28,8 @@ class SessionRun {
   bool get toolFailure => reply?.toolResults.any(resultFailed) ?? false;
   String get status => working
       ? 'Working'
+      : restored
+      ? 'Archived'
       : error != null
       ? 'Failed'
       : toolFailure
@@ -71,6 +82,16 @@ class WelcomePanel extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
+                          'J.A.R.V.I.S // LOCAL CONSOLE',
+                          style: TextStyle(
+                            color: ConsoleColors.accent,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.6,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
                           'At your command.',
                           style: TextStyle(
                             fontSize: 32,
@@ -81,7 +102,7 @@ class WelcomePanel extends StatelessWidget {
                         ),
                         const SizedBox(height: 14),
                         const Text(
-                          'One place to think, build and get things done\non your machine.',
+                          'Your local workspace for thinking, building and\ngetting things done on this machine.',
                           style: TextStyle(
                             color: ConsoleColors.muted,
                             fontSize: 14,
@@ -118,7 +139,7 @@ class WelcomePanel extends StatelessWidget {
                 ),
                 const SizedBox(height: 40),
                 const Text(
-                  'Start with a request',
+                  'Choose a safe starting point',
                   style: TextStyle(fontSize: 12, color: ConsoleColors.muted),
                 ),
                 const SizedBox(height: 14),
@@ -268,10 +289,12 @@ class TasksPage extends StatelessWidget {
   const TasksPage({
     super.key,
     required this.runs,
+    required this.archivedRuns,
     required this.onOpenAssistant,
     required this.onOpenErrors,
   });
   final List<SessionRun> runs;
+  final List<SessionRun> archivedRuns;
   final VoidCallback onOpenAssistant;
   final VoidCallback onOpenErrors;
   @override
@@ -279,11 +302,11 @@ class TasksPage extends StatelessWidget {
     padding: const EdgeInsets.all(28),
     children: [
       const _PageHeading(
-        'A clear trail of work.',
-        'Requests from this desktop session. Full Core task history is not connected yet.',
+        'Conversation archive.',
+        'Current requests and earlier Assistant conversations, kept locally on this device.',
       ),
       const SizedBox(height: 28),
-      if (runs.isEmpty)
+      if (runs.isEmpty && archivedRuns.isEmpty)
         ConsolePanel(
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 28),
@@ -296,12 +319,12 @@ class TasksPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 18),
                 const Text(
-                  'No requests in this session',
+                  'No saved conversations yet',
                   style: TextStyle(fontSize: 18),
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Start in Assistant. Your requests and responses will appear here.',
+                  'Start in Assistant. Current requests appear here, and completed sessions remain available after restart.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: ConsoleColors.muted, height: 1.6),
                 ),
@@ -313,9 +336,9 @@ class TasksPage extends StatelessWidget {
               ],
             ),
           ),
-        )
-      else ...[
-        Text('${runs.length} session requests', style: metadataStyle),
+        ),
+      if (runs.isNotEmpty) ...[
+        Text('Current session · ${runs.length}', style: metadataStyle),
         const SizedBox(height: 16),
         for (final run in runs.reversed)
           Padding(
@@ -353,6 +376,57 @@ class TasksPage extends StatelessWidget {
             ),
           ),
       ],
+      if (runs.isNotEmpty && archivedRuns.isNotEmpty)
+        const SizedBox(height: 24),
+      if (archivedRuns.isNotEmpty) ...[
+        Text(
+          'Previous sessions · ${archivedRuns.length}',
+          style: metadataStyle,
+        ),
+        const SizedBox(height: 16),
+        for (final run in archivedRuns.reversed)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: ConsolePanel(
+              child: Material(
+                type: MaterialType.transparency,
+                child: ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: const EdgeInsets.only(top: 4, bottom: 8),
+                  title: Text(
+                    run.prompt,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 14, height: 1.5),
+                  ),
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Row(
+                      children: [
+                        StatusLabel(run.status, color: run.color),
+                        const SizedBox(width: 12),
+                        Text(clockLabel(run.started), style: metadataStyle),
+                      ],
+                    ),
+                  ),
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: SelectableText(
+                        run.reply?.reply ?? 'No reply was saved.',
+                        style: const TextStyle(
+                          color: ConsoleColors.muted,
+                          fontSize: 13,
+                          height: 1.7,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
     ],
   );
 }
@@ -364,11 +438,15 @@ class DevicePage extends StatelessWidget {
     required this.solid,
     required this.reduceMotion,
     required this.busy,
+    required this.speech,
+    required this.speechProvider,
   });
   final RuntimeMonitor monitor;
   final bool solid;
   final bool reduceMotion;
   final bool busy;
+  final SpeechController speech;
+  final SpeechProvider speechProvider;
   @override
   Widget build(BuildContext context) => ListView(
     padding: const EdgeInsets.all(28),
@@ -423,28 +501,48 @@ class DevicePage extends StatelessWidget {
               ConsolePanel(
                 key: const ValueKey('device-capabilities-panel'),
                 solid: solid,
-                child: const Column(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    const Text(
                       'Desktop capabilities',
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    SizedBox(height: 14),
-                    _PlannedFeature(
+                    const SizedBox(height: 14),
+                    ListenableBuilder(
+                      listenable: speech,
+                      builder: (context, _) => _PlannedFeature(
+                        speech.speaking
+                            ? Icons.volume_up_outlined
+                            : Icons.record_voice_over_outlined,
+                        'Voice output',
+                        speech.speaking
+                            ? 'Reading the latest response through ${speechProvider.label}.'
+                            : speech.error ?? speechProvider.description,
+                        state: speech.speaking
+                            ? 'Speaking'
+                            : speechProvider == SpeechProvider.system
+                            ? 'Local'
+                            : 'Cloud',
+                        color: speech.speaking
+                            ? ConsoleColors.good
+                            : ConsoleColors.accent,
+                      ),
+                    ),
+                    const _PlannedFeature(
                       Icons.mic_none,
                       'Voice input',
-                      'No microphone is recording.',
+                      'No microphone is recording or routed to Core.',
                     ),
-                    _PlannedFeature(
+                    const _PlannedFeature(
                       Icons.hearing_outlined,
                       'Wake word',
                       'Activation is not connected yet.',
                     ),
-                    _PlannedFeature(
+                    const _PlannedFeature(
                       Icons.blur_circular,
                       'Desktop companion',
                       'Floating companion is planned.',
@@ -474,17 +572,25 @@ class DevicePage extends StatelessWidget {
 }
 
 class _PlannedFeature extends StatelessWidget {
-  const _PlannedFeature(this.icon, this.title, this.description);
+  const _PlannedFeature(
+    this.icon,
+    this.title,
+    this.description, {
+    this.state = 'Planned',
+    this.color = ConsoleColors.dim,
+  });
   final IconData icon;
   final String title;
   final String description;
+  final String state;
+  final Color color;
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 14),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 20),
+        Icon(icon, size: 20, color: color),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
@@ -495,10 +601,7 @@ class _PlannedFeature extends StatelessWidget {
                 runSpacing: 6,
                 children: [
                   Text(title, style: const TextStyle(fontSize: 13)),
-                  const Text(
-                    'Planned',
-                    style: TextStyle(color: ConsoleColors.dim, fontSize: 11),
-                  ),
+                  Text(state, style: TextStyle(color: color, fontSize: 11)),
                 ],
               ),
               const SizedBox(height: 6),
@@ -527,6 +630,10 @@ class SettingsPage extends StatelessWidget {
     required this.onReduceMotion,
     required this.onReduceTransparency,
     required this.onPermissionPreview,
+    required this.speechProvider,
+    required this.onSpeechProvider,
+    required this.autoReadReplies,
+    required this.onAutoReadReplies,
   });
   final RuntimeMonitor monitor;
   final bool solid;
@@ -534,6 +641,10 @@ class SettingsPage extends StatelessWidget {
   final ValueChanged<bool> onReduceMotion;
   final ValueChanged<bool> onReduceTransparency;
   final VoidCallback onPermissionPreview;
+  final SpeechProvider speechProvider;
+  final ValueChanged<SpeechProvider> onSpeechProvider;
+  final bool autoReadReplies;
+  final ValueChanged<bool> onAutoReadReplies;
   @override
   Widget build(BuildContext context) => ListView(
     padding: const EdgeInsets.all(28),
@@ -579,6 +690,131 @@ class SettingsPage extends StatelessWidget {
               ),
               value: solid,
               onChanged: onReduceTransparency,
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 18),
+      ConsolePanel(
+        solid: solid,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Voice output',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<SpeechProvider>(
+              key: const ValueKey('speech-provider'),
+              initialValue: speechProvider,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Read reply provider',
+              ),
+              items: [
+                for (final provider in SpeechProvider.values)
+                  DropdownMenuItem(
+                    value: provider,
+                    child: Text(provider.label),
+                  ),
+              ],
+              onChanged: (provider) {
+                if (provider != null) onSpeechProvider(provider);
+              },
+            ),
+            const SizedBox(height: 14),
+            Text(
+              speechProvider.description,
+              style: const TextStyle(
+                fontSize: 12,
+                color: ConsoleColors.muted,
+                height: 1.6,
+              ),
+            ),
+            if (speechProvider == SpeechProvider.system) ...[
+              const SizedBox(height: 14),
+              const Divider(),
+              const SizedBox(height: 12),
+              ListenableBuilder(
+                listenable: monitor,
+                builder: (context, _) {
+                  final settings = monitor.speechSettings;
+                  final available = settings != null;
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        available ? Icons.sync : Icons.sync_problem_outlined,
+                        size: 18,
+                        color: available
+                            ? ConsoleColors.good
+                            : ConsoleColors.warning,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              available
+                                  ? '${settings.voice} · Speed ${settings.speed}'
+                                  : 'Waiting for Windows Speech settings',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              available
+                                  ? 'Auto-sync from Windows · Every ${monitor.intervalSeconds}s'
+                                  : monitor.speechSettingsError ??
+                                        'JARVIS will retry automatically.',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: ConsoleColors.muted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      StatusLabel(
+                        available ? 'Synced' : 'Unavailable',
+                        color: available
+                            ? ConsoleColors.good
+                            : ConsoleColors.warning,
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ],
+            if (speechProvider == SpeechProvider.fish) ...[
+              const SizedBox(height: 10),
+              const Text(
+                'Fish Audio needs FISH_API_KEY in the local .env file. The key is never entered into or stored by this UI.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: ConsoleColors.warning,
+                  height: 1.6,
+                ),
+              ),
+            ],
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text(
+                'Auto read completed replies',
+                style: TextStyle(fontSize: 14),
+              ),
+              subtitle: Text(
+                autoReadReplies
+                    ? 'Reply text remains visible while its selected voice starts.'
+                    : 'Use Read reply beside an answer to start voice output.',
+                style: const TextStyle(fontSize: 12),
+              ),
+              value: autoReadReplies,
+              onChanged: onAutoReadReplies,
             ),
           ],
         ),

@@ -4,16 +4,17 @@
 import 'package:flutter/material.dart';
 
 abstract final class ConsoleColors {
-  static const canvas = Color(0xFF0C1014);
-  static const rail = Color(0xFF11171D);
-  static const panel = Color(0xFF151D24);
-  static const raised = Color(0xFF1D2831);
-  static const line = Color(0xFF2E3D48);
-  static const ink = Color(0xFFEAF1F5);
-  static const muted = Color(0xFFA2B2BE);
-  static const dim = Color(0xFF879AA8);
-  static const accent = Color(0xFF88D4E6);
-  static const accentSoft = Color(0xFF203C46);
+  static const canvas = Color(0xFF060B10);
+  static const rail = Color(0xFF0A131A);
+  static const monitor = Color(0xFF0D1C25);
+  static const panel = Color(0xFF101C25);
+  static const raised = Color(0xFF162833);
+  static const line = Color(0xFF294654);
+  static const ink = Color(0xFFE6F7FB);
+  static const muted = Color(0xFFA2C1CB);
+  static const dim = Color(0xFF71919D);
+  static const accent = Color(0xFF71E4FF);
+  static const accentSoft = Color(0xFF123B4A);
   static const good = Color(0xFF91D9B8);
   static const warning = Color(0xFFF0C38B);
   static const danger = Color(0xFFF1A0A0);
@@ -31,7 +32,7 @@ ThemeData consoleTheme() {
   final base = ThemeData(
     useMaterial3: true,
     brightness: Brightness.dark,
-    fontFamily: 'Segoe UI',
+    fontFamily: 'Segoe UI Variable',
     fontFamilyFallback: const ['Microsoft YaHei UI'],
     scaffoldBackgroundColor: ConsoleColors.canvas,
     colorScheme: const ColorScheme.dark(
@@ -129,7 +130,7 @@ class ConsolePanel extends StatelessWidget {
               ],
             ),
       border: Border.all(color: ConsoleColors.line.withValues(alpha: .7)),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
     ),
     child: child,
   );

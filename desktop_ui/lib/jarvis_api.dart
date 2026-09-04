@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 class JarvisApi {
   JarvisApi({HttpClient? client}) : _client = client ?? HttpClient() {
@@ -39,9 +40,103 @@ class JarvisApi {
     );
     return JarvisChatReply(
       reply: response['reply'] as String? ?? 'No response was returned.',
+      speech:
+          response['speech'] as String? ??
+          response['reply'] as String? ??
+          'No response was returned.',
       toolResults: (response['tool_results'] as List<dynamic>? ?? const [])
           .cast<Map<String, dynamic>>(),
     );
+  }
+
+  Future<List<JarvisHistoryTurn>> conversationHistory() async {
+    final response = await _request('GET', '/api/chat/history');
+    return (response['turns'] as List<dynamic>? ?? const [])
+        .map((turn) => JarvisHistoryTurn.fromJson(turn as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<Uint8List> synthesizeFishSpeech(String text) async {
+    try {
+      final request = await _client.openUrl(
+        'POST',
+        _base.replace(path: '/api/speech'),
+      );
+      request.headers.contentType = ContentType.json;
+      request.write(jsonEncode({'text': text}));
+      final response = await request.close();
+      final bytes = await response.fold<List<int>>(
+        [],
+        (value, chunk) => value..addAll(chunk),
+      );
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final message = utf8.decode(bytes, allowMalformed: true);
+        final decoded = message.isEmpty
+            ? <String, dynamic>{}
+            : jsonDecode(message) as Map<String, dynamic>;
+        throw JarvisApiException(
+          decoded['detail'] as String? ?? 'Fish Audio speech is unavailable.',
+        );
+      }
+      return Uint8List.fromList(bytes);
+    } on SocketException {
+      throw const JarvisApiException(
+        'JARVIS Core is offline. Start it with .\\run-desktop.ps1.',
+      );
+    } on HttpException catch (error) {
+      throw JarvisApiException('Fish Audio speech failed: ${error.message}');
+    } on FormatException {
+      throw const JarvisApiException(
+        'Fish Audio returned an invalid response.',
+      );
+    }
+  }
+
+  Future<void> speakWithWindowsVoice(String text) =>
+      _sendSpeechCommand('/api/system-speech', body: {'text': text});
+
+  Future<WindowsSpeechSettings> windowsSpeechSettings() async =>
+      WindowsSpeechSettings.fromJson(
+        await _request('GET', '/api/system-speech/settings'),
+      );
+
+  Future<void> stopWindowsVoice() =>
+      _sendSpeechCommand('/api/system-speech/stop');
+
+  Future<void> _sendSpeechCommand(
+    String path, {
+    Map<String, dynamic>? body,
+  }) async {
+    try {
+      final request = await _client.openUrl('POST', _base.replace(path: path));
+      request.headers.contentType = ContentType.json;
+      if (body != null) request.write(jsonEncode(body));
+      final response = await request.close();
+      final bytes = await response.fold<List<int>>(
+        [],
+        (value, chunk) => value..addAll(chunk),
+      );
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final decoded = bytes.isEmpty
+            ? <String, dynamic>{}
+            : jsonDecode(utf8.decode(bytes, allowMalformed: true))
+                  as Map<String, dynamic>;
+        throw JarvisApiException(
+          decoded['detail'] as String? ??
+              'Windows system voice is unavailable.',
+        );
+      }
+    } on SocketException {
+      throw const JarvisApiException(
+        'JARVIS Core is offline. Start it with .\\run-desktop.ps1.',
+      );
+    } on HttpException catch (error) {
+      throw JarvisApiException('Windows system voice failed: ${error.message}');
+    } on FormatException {
+      throw const JarvisApiException(
+        'Windows system voice returned an invalid response.',
+      );
+    }
   }
 
   Future<Map<String, dynamic>> _request(
@@ -197,9 +292,59 @@ class JarvisHealth {
 }
 
 class JarvisChatReply {
-  const JarvisChatReply({required this.reply, required this.toolResults});
+  const JarvisChatReply({
+    required this.reply,
+    String? speech,
+    required this.toolResults,
+  }) : speech = speech ?? reply;
   final String reply;
+  final String speech;
   final List<Map<String, dynamic>> toolResults;
+}
+
+class JarvisHistoryTurn {
+  const JarvisHistoryTurn({
+    required this.user,
+    required this.assistant,
+    required this.speech,
+    required this.createdAt,
+  });
+
+  factory JarvisHistoryTurn.fromJson(Map<String, dynamic> json) {
+    final assistant = json['assistant'] as String? ?? '';
+    return JarvisHistoryTurn(
+      user: json['user'] as String? ?? '',
+      assistant: assistant,
+      speech: json['speech'] as String? ?? assistant,
+      createdAt:
+          DateTime.tryParse(json['created_at'] as String? ?? '')?.toLocal() ??
+          DateTime.now(),
+    );
+  }
+
+  final String user;
+  final String assistant;
+  final String speech;
+  final DateTime createdAt;
+}
+
+class WindowsSpeechSettings {
+  const WindowsSpeechSettings({
+    required this.voice,
+    required this.speed,
+    required this.source,
+  });
+
+  factory WindowsSpeechSettings.fromJson(Map<String, dynamic> json) =>
+      WindowsSpeechSettings(
+        voice: json['voice'] as String? ?? 'Unknown Windows voice',
+        speed: (json['speed'] as num?)?.toInt() ?? 0,
+        source: json['source'] as String? ?? 'Windows Speech settings',
+      );
+
+  final String voice;
+  final int speed;
+  final String source;
 }
 
 class JarvisApiException implements Exception {

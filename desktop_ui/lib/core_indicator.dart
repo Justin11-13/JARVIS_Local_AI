@@ -87,10 +87,15 @@ class _CoreIndicatorState extends State<CoreIndicator>
                 Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      widget.busy ? Icons.bolt : Icons.memory_outlined,
-                      color: color,
-                      size: 27,
+                    Text(
+                      'J',
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 30,
+                        height: 1,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -1,
+                      ),
                     ),
                     const SizedBox(height: 10),
                     Text(
@@ -132,6 +137,11 @@ class _InstrumentPainter extends CustomPainter {
     final center = size.center(Offset.zero);
     final r = size.shortestSide / 2;
     final paint = Paint()..style = PaintingStyle.stroke;
+    canvas.drawCircle(
+      center,
+      r * .56,
+      Paint()..color = color.withValues(alpha: detailed ? .045 : .02),
+    );
     paint
       ..color = color.withValues(alpha: .16)
       ..strokeWidth = 1;
@@ -146,6 +156,16 @@ class _InstrumentPainter extends CustomPainter {
           center + unit * r * .95,
           center + unit * r * (i % 4 == 0 ? .88 : .92),
           paint,
+        );
+      }
+      for (var i = 0; i < 4; i++) {
+        final angle = turn.value * math.pi * 2 + i * math.pi / 2;
+        final point =
+            center + Offset(math.cos(angle), math.sin(angle)) * r * .73;
+        canvas.drawCircle(
+          point,
+          2,
+          Paint()..color = color.withValues(alpha: .7),
         );
       }
     }

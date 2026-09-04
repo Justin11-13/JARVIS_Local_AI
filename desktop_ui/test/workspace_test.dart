@@ -11,6 +11,7 @@ class FakeApi extends JarvisApi {
   int reads = 0;
   int chats = 0;
   final messages = <String>[];
+  List<JarvisHistoryTurn> history = const [];
   bool offline = false;
   Completer<SystemSample>? pending;
   Completer<JarvisChatReply>? chatReply;
@@ -49,12 +50,23 @@ class FakeApi extends JarvisApi {
   }
 
   @override
+  Future<WindowsSpeechSettings> windowsSpeechSettings() async =>
+      const WindowsSpeechSettings(
+        voice: 'Microsoft George',
+        speed: 0,
+        source: 'Windows Speech settings',
+      );
+
+  @override
   Future<JarvisChatReply> sendMessage(String message) async {
     chats++;
     messages.add(message);
     if (chatReply != null) return chatReply!.future;
     return const JarvisChatReply(reply: 'Connected response.', toolResults: []);
   }
+
+  @override
+  Future<List<JarvisHistoryTurn>> conversationHistory() async => history;
 }
 
 void main() {
@@ -109,6 +121,60 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.tap(find.byKey(const ValueKey('nav-3')));
     await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await unmount(tester);
+  });
+  testWidgets('header identifies the assistant and active model', (
+    tester,
+  ) async {
+    await mount(tester, FakeApi(), const Size(1440, 900));
+    await tester.pumpAndSettle();
+    expect(find.text('Personal assistant'), findsOneWidget);
+    expect(find.text('MODEL · CODEX'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await unmount(tester);
+  });
+  testWidgets('persistent conversation is archived outside Assistant', (
+    tester,
+  ) async {
+    final api = FakeApi()
+      ..history = [
+        JarvisHistoryTurn(
+          user: 'Remember this question',
+          assistant: 'Restored answer',
+          speech: 'Restored spoken answer',
+          createdAt: DateTime(2026, 9, 4, 12),
+        ),
+      ];
+
+    await mount(tester, api, const Size(1440, 900));
+    await tester.pumpAndSettle();
+
+    expect(find.text('At your command.'), findsOneWidget);
+    expect(find.text('Remember this question'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('nav-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('Remember this question'), findsOneWidget);
+    expect(find.text('Archived'), findsOneWidget);
+    await tester.tap(find.text('Remember this question'));
+    await tester.pumpAndSettle();
+    expect(find.text('Restored answer'), findsOneWidget);
+    expect(find.textContaining('Response time'), findsNothing);
+    await unmount(tester);
+  });
+  testWidgets('settings offers an explicit reply voice provider', (
+    tester,
+  ) async {
+    await mount(tester, FakeApi(), const Size(1440, 900));
+    await tester.tap(find.byKey(const ValueKey('nav-3')));
+    await tester.pumpAndSettle();
+    expect(find.text('Windows system voice'), findsOneWidget);
+    expect(find.text('Microsoft George · Speed 0'), findsOneWidget);
+    expect(find.text('Synced'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('speech-provider')));
+    await tester.pumpAndSettle();
+    expect(find.text('Fish Audio cloud'), findsOneWidget);
+    expect(find.text('Auto read completed replies'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await unmount(tester);
   });
@@ -177,9 +243,23 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('A real reply.'), findsOneWidget);
+    expect(find.text('Read reply'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('nav-1')));
     await tester.pumpAndSettle();
     expect(find.text('Show system status'), findsOneWidget);
+    await unmount(tester);
+  });
+  testWidgets('voice input is visible but stays unconnected', (tester) async {
+    await mount(tester, FakeApi(), const Size(1440, 900));
+    await tester.tap(find.byKey(const ValueKey('voice-input')));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Voice input is planned. No microphone audio is being recorded.',
+      ),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
     await unmount(tester);
   });
   testWidgets('offline UI never labels old readings as live', (tester) async {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,9 +6,11 @@ import 'console_theme.dart';
 import 'core_indicator.dart';
 import 'error_log.dart';
 import 'errors_page.dart';
+import 'hologram_backdrop.dart';
 import 'jarvis_api.dart';
 import 'runtime_monitor.dart';
 import 'runtime_panel.dart';
+import 'speech_controller.dart';
 import 'workspace_pages.dart';
 
 void main() => runApp(const JarvisApp());
@@ -57,14 +60,18 @@ class DesktopWorkspace extends StatefulWidget {
 class _DesktopWorkspaceState extends State<DesktopWorkspace> {
   late final JarvisApi _api = widget.api ?? JarvisApi();
   late final RuntimeMonitor _monitor = RuntimeMonitor(_api);
+  late final SpeechController _speech = SpeechController(_api);
   final _prompt = TextEditingController();
   final _promptFocus = FocusNode();
   final _scroll = ScrollController();
   final _scaffold = GlobalKey<ScaffoldState>();
   final _runs = <SessionRun>[];
+  final _archivedRuns = <SessionRun>[];
   int _page = 0;
   bool _reduceTransparency = false;
   bool _reduceMotion = false;
+  SpeechProvider _speechProvider = SpeechProvider.system;
+  bool _autoReadReplies = false;
   bool _submitting = false;
   String? _lastMonitorError;
   TextEditingValue? _enterValue;
@@ -75,6 +82,31 @@ class _DesktopWorkspaceState extends State<DesktopWorkspace> {
     super.initState();
     _monitor.addListener(_recordMonitorError);
     _monitor.start();
+    unawaited(_loadConversationArchive());
+  }
+
+  Future<void> _loadConversationArchive() async {
+    try {
+      final history = await _api.conversationHistory();
+      if (!mounted || history.isEmpty) return;
+      setState(() {
+        _archivedRuns.addAll(
+          history.map(
+            (turn) => SessionRun.restored(
+              prompt: turn.user,
+              started: turn.createdAt,
+              restoredReply: JarvisChatReply(
+                reply: turn.assistant,
+                speech: turn.speech,
+                toolResults: const [],
+              ),
+            ),
+          ),
+        );
+      });
+    } on JarvisApiException {
+      // RuntimeMonitor already reports connection failures and retries.
+    }
   }
 
   void _recordMonitorError() {
@@ -89,6 +121,7 @@ class _DesktopWorkspaceState extends State<DesktopWorkspace> {
   @override
   void dispose() {
     _monitor.dispose();
+    _speech.dispose();
     if (widget.api == null) _api.close();
     _prompt.dispose();
     _promptFocus.dispose();
@@ -107,11 +140,15 @@ class _DesktopWorkspaceState extends State<DesktopWorkspace> {
         final narrow = constraints.maxWidth < 600;
         final inspector =
             constraints.maxWidth >= 1280 && _page != 2 && _page != 4;
+        final headerCompact =
+            inspector ||
+            constraints.maxWidth < 1600 ||
+            MediaQuery.textScalerOf(context).scale(13) / 13 > 1.0;
         return Scaffold(
           key: _scaffold,
           endDrawer: Drawer(
             width: 320,
-            backgroundColor: ConsoleColors.rail,
+            backgroundColor: ConsoleColors.monitor,
             child: SafeArea(
               child: ListView(
                 padding: const EdgeInsets.all(22),
@@ -155,76 +192,82 @@ class _DesktopWorkspaceState extends State<DesktopWorkspace> {
                   ),
                 )
               : null,
-          body: SafeArea(
-            child: Row(
-              children: [
-                if (!narrow)
-                  ListenableBuilder(
-                    listenable: widget.errorLog,
-                    builder: (context, _) => _Sidebar(
-                      selected: _page,
-                      onSelect: _selectPage,
-                      compact: constraints.maxWidth < 1020,
-                      monitor: _monitor,
-                      runs: _runs,
-                      busy: _submitting,
-                      errorCount: widget.errorLog.entries.length,
-                    ),
-                  ),
-                Expanded(
-                  child: Column(
-                    children: [
-                      _Header(
-                        page: _page,
-                        compact: constraints.maxWidth < 900,
-                        monitor: _monitor,
-                        showMonitor: !inspector,
-                        onMonitor: () =>
-                            _scaffold.currentState!.openEndDrawer(),
-                      ),
+          body: Stack(
+            children: [
+              const Positioned.fill(child: HologramBackdrop()),
+              SafeArea(
+                child: Row(
+                  children: [
+                    if (!narrow)
                       ListenableBuilder(
                         listenable: widget.errorLog,
-                        builder: (context, _) =>
-                            _page != 4 && widget.errorLog.hasInterfaceErrors
-                            ? Padding(
-                                padding: const EdgeInsets.fromLTRB(
-                                  24,
-                                  12,
-                                  24,
-                                  0,
-                                ),
-                                child: ErrorNotice(
-                                  message:
-                                      'An interface error was recorded. Some content may be unavailable.',
-                                  onOpenErrors: () => _selectPage(4),
-                                ),
-                              )
-                            : const SizedBox.shrink(),
+                        builder: (context, _) => _Sidebar(
+                          selected: _page,
+                          onSelect: _selectPage,
+                          compact: constraints.maxWidth < 1020,
+                          monitor: _monitor,
+                          runs: _runs,
+                          archivedCount: _archivedRuns.length,
+                          busy: _submitting,
+                          errorCount: widget.errorLog.entries.length,
+                        ),
                       ),
-                      Expanded(child: _buildPage()),
-                    ],
-                  ),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          _Header(
+                            page: _page,
+                            compact: headerCompact,
+                            monitor: _monitor,
+                            showMonitor: !inspector,
+                            onMonitor: () =>
+                                _scaffold.currentState!.openEndDrawer(),
+                          ),
+                          ListenableBuilder(
+                            listenable: widget.errorLog,
+                            builder: (context, _) =>
+                                _page != 4 && widget.errorLog.hasInterfaceErrors
+                                ? Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      24,
+                                      12,
+                                      24,
+                                      0,
+                                    ),
+                                    child: ErrorNotice(
+                                      message:
+                                          'An interface error was recorded. Some content may be unavailable.',
+                                      onOpenErrors: () => _selectPage(4),
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                          Expanded(child: _buildPage()),
+                        ],
+                      ),
+                    ),
+                    if (inspector)
+                      Container(
+                        width: 286,
+                        decoration: const BoxDecoration(
+                          color: ConsoleColors.monitor,
+                          border: Border(
+                            left: BorderSide(color: ConsoleColors.line),
+                          ),
+                        ),
+                        child: ListView(
+                          padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
+                          children: [
+                            RuntimePanel(monitor: _monitor),
+                            const SizedBox(height: 28),
+                            const SafetyNote(),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
-                if (inspector)
-                  Container(
-                    width: 286,
-                    decoration: const BoxDecoration(
-                      color: ConsoleColors.rail,
-                      border: Border(
-                        left: BorderSide(color: ConsoleColors.line),
-                      ),
-                    ),
-                    child: ListView(
-                      padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
-                      children: [
-                        RuntimePanel(monitor: _monitor),
-                        const SizedBox(height: 28),
-                        const SafetyNote(),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },
@@ -234,6 +277,7 @@ class _DesktopWorkspaceState extends State<DesktopWorkspace> {
   Widget _buildPage() => switch (_page) {
     1 => TasksPage(
       runs: _runs,
+      archivedRuns: _archivedRuns,
       onOpenAssistant: () => _selectPage(0),
       onOpenErrors: () => _selectPage(4),
     ),
@@ -242,6 +286,8 @@ class _DesktopWorkspaceState extends State<DesktopWorkspace> {
       solid: _reduceTransparency,
       reduceMotion: _reduceMotion,
       busy: _submitting,
+      speech: _speech,
+      speechProvider: _speechProvider,
     ),
     3 => SettingsPage(
       monitor: _monitor,
@@ -250,6 +296,11 @@ class _DesktopWorkspaceState extends State<DesktopWorkspace> {
       onReduceMotion: (value) => setState(() => _reduceMotion = value),
       onReduceTransparency: (value) =>
           setState(() => _reduceTransparency = value),
+      speechProvider: _speechProvider,
+      onSpeechProvider: (provider) =>
+          setState(() => _speechProvider = provider),
+      autoReadReplies: _autoReadReplies,
+      onAutoReadReplies: (value) => setState(() => _autoReadReplies = value),
       onPermissionPreview: _showPermissionPreview,
     ),
     4 => ErrorsPage(log: widget.errorLog),
@@ -272,6 +323,8 @@ class _DesktopWorkspaceState extends State<DesktopWorkspace> {
                     runIndex: index,
                     reduceMotion: _reduceMotion,
                     onOpenErrors: () => _selectPage(4),
+                    speech: _speech,
+                    speechProvider: _speechProvider,
                   ),
                 ),
         ),
@@ -283,6 +336,9 @@ class _DesktopWorkspaceState extends State<DesktopWorkspace> {
             busy: _submitting,
             onSend: _submitPrompt,
             onKeyEvent: _composerKeyEvent,
+            onVoiceInput: () => _toast(
+              'Voice input is planned. No microphone audio is being recorded.',
+            ),
           ),
         ),
       ],
@@ -373,6 +429,9 @@ class _DesktopWorkspaceState extends State<DesktopWorkspace> {
       final reply = await _api.sendMessage(text);
       if (!mounted) return;
       setState(() => run.reply = reply);
+      if (_autoReadReplies) {
+        unawaited(_speech.speak(reply.speech, provider: _speechProvider));
+      }
       for (final result in reply.toolResults) {
         if (SessionRun.resultFailed(result)) {
           widget.errorLog.record(
@@ -459,6 +518,7 @@ class _Sidebar extends StatelessWidget {
     required this.compact,
     required this.monitor,
     required this.runs,
+    required this.archivedCount,
     required this.busy,
     required this.errorCount,
   });
@@ -467,6 +527,7 @@ class _Sidebar extends StatelessWidget {
   final bool compact;
   final RuntimeMonitor monitor;
   final List<SessionRun> runs;
+  final int archivedCount;
   final bool busy;
   final int errorCount;
   @override
@@ -489,12 +550,17 @@ class _Sidebar extends StatelessWidget {
               const CoreIndicator(size: 34, label: false),
               if (!compact) ...[
                 const SizedBox(width: 12),
-                const Text(
-                  'JARVIS',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 2,
+                const Expanded(
+                  child: Text(
+                    'J.A.R.V.I.S',
+                    maxLines: 1,
+                    overflow: TextOverflow.fade,
+                    softWrap: false,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.2,
+                    ),
                   ),
                 ),
               ],
@@ -564,8 +630,11 @@ class _Sidebar extends StatelessWidget {
                               ),
                             ),
                             const Spacer(),
-                            if (i == 1 && runs.isNotEmpty)
-                              Text('${runs.length}', style: metadataStyle),
+                            if (i == 1 && runs.length + archivedCount > 0)
+                              Text(
+                                '${runs.length + archivedCount}',
+                                style: metadataStyle,
+                              ),
                             if (i == 4 && errorCount > 0)
                               Text(
                                 '$errorCount',
@@ -676,46 +745,113 @@ class _Header extends StatelessWidget {
   final bool showMonitor;
   final VoidCallback onMonitor;
   @override
-  Widget build(BuildContext context) => Container(
-    padding: EdgeInsets.symmetric(horizontal: compact ? 18 : 28, vertical: 14),
-    decoration: const BoxDecoration(
-      border: Border(bottom: BorderSide(color: ConsoleColors.line)),
-    ),
-    child: Row(
-      children: [
-        Text(
-          _destinations[page].$1,
-          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-        ),
-        if (!compact) ...[
-          const SizedBox(width: 14),
-          Container(width: 1, height: 15, color: ConsoleColors.line),
-          const SizedBox(width: 14),
-          const Text(
-            'Personal workspace',
-            style: TextStyle(color: ConsoleColors.dim, fontSize: 12),
+  Widget build(BuildContext context) {
+    final showIdentity =
+        MediaQuery.sizeOf(context).width >= 820 &&
+        MediaQuery.textScalerOf(context).scale(13) / 13 <= 1.15;
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 18 : 28,
+        vertical: 14,
+      ),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: ConsoleColors.line)),
+      ),
+      child: Row(
+        children: [
+          Text(
+            _destinations[page].$1,
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
           ),
-        ],
-        const Spacer(),
-        if (!compact)
-          ListenableBuilder(
-            listenable: monitor,
-            builder: (context, _) => Text(
-              monitor.health?.brain ?? 'Codex',
-              style: metadataStyle.copyWith(fontSize: 11),
+          if (showIdentity) ...[
+            const SizedBox(width: 14),
+            Container(width: 1, height: 15, color: ConsoleColors.line),
+            const SizedBox(width: 14),
+            const Text(
+              'Personal assistant',
+              style: TextStyle(color: ConsoleColors.dim, fontSize: 12),
             ),
-          ),
-        if (showMonitor) ...[
-          const SizedBox(width: 8),
-          IconButton(
-            tooltip: 'Open system monitor',
-            onPressed: onMonitor,
-            icon: const Icon(Icons.monitor_heart_outlined, size: 20),
-          ),
-        ] else
-          const SizedBox(height: 44),
-      ],
-    ),
+          ],
+          const Spacer(),
+          if (showIdentity)
+            ListenableBuilder(
+              listenable: monitor,
+              builder: (context, _) {
+                final model = monitor.health?.brain;
+                return Text(
+                  model == null
+                      ? 'MODEL · UNAVAILABLE'
+                      : 'MODEL · ${model.toUpperCase()}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: metadataStyle.copyWith(
+                    color: model == null
+                        ? ConsoleColors.dim
+                        : ConsoleColors.accent,
+                    fontSize: 10,
+                    letterSpacing: .8,
+                  ),
+                );
+              },
+            ),
+          if (!compact)
+            ListenableBuilder(
+              listenable: monitor,
+              builder: (context, _) => StatusLabel(
+                monitor.online ? 'Core link online' : 'Core link offline',
+                color: monitor.online
+                    ? ConsoleColors.good
+                    : ConsoleColors.warning,
+              ),
+            ),
+          if (!compact) const SizedBox(width: 18),
+          if (!compact) const _LiveClock(),
+          if (!compact)
+            ListenableBuilder(
+              listenable: monitor,
+              builder: (context, _) => Text(
+                monitor.health?.brain ?? 'Codex',
+                style: metadataStyle.copyWith(fontSize: 11),
+              ),
+            ),
+          if (showMonitor) ...[
+            const SizedBox(width: 8),
+            IconButton(
+              tooltip: 'Open system monitor',
+              onPressed: onMonitor,
+              icon: const Icon(Icons.monitor_heart_outlined, size: 20),
+            ),
+          ] else
+            const SizedBox(height: 44),
+        ],
+      ),
+    );
+  }
+}
+
+class _LiveClock extends StatefulWidget {
+  const _LiveClock();
+
+  @override
+  State<_LiveClock> createState() => _LiveClockState();
+}
+
+class _LiveClockState extends State<_LiveClock> {
+  late final Timer _timer = Timer.periodic(
+    const Duration(seconds: 1),
+    (_) => mounted ? setState(() {}) : null,
+  );
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Text(
+    clockLabel(DateTime.now()),
+    style: metadataStyle.copyWith(color: ConsoleColors.accent, fontSize: 11),
   );
 }
 
@@ -726,12 +862,14 @@ class _Composer extends StatelessWidget {
     required this.busy,
     required this.onSend,
     required this.onKeyEvent,
+    required this.onVoiceInput,
   });
   final TextEditingController controller;
   final FocusNode focusNode;
   final bool busy;
   final VoidCallback onSend;
   final FocusOnKeyEventCallback onKeyEvent;
+  final VoidCallback onVoiceInput;
   @override
   Widget build(BuildContext context) => ConsolePanel(
     key: const ValueKey('composer'),
@@ -771,6 +909,12 @@ class _Composer extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
+        IconButton(
+          key: const ValueKey('voice-input'),
+          tooltip: 'Voice input is planned. No microphone audio is recorded.',
+          onPressed: busy ? null : onVoiceInput,
+          icon: const Icon(Icons.mic_none, size: 19),
+        ),
         IconButton.filled(
           key: const ValueKey('send'),
           tooltip: busy
@@ -790,11 +934,15 @@ class _RunView extends StatelessWidget {
     required this.runIndex,
     required this.reduceMotion,
     required this.onOpenErrors,
+    required this.speech,
+    required this.speechProvider,
   });
   final SessionRun run;
   final int runIndex;
   final bool reduceMotion;
   final VoidCallback onOpenErrors;
+  final SpeechController speech;
+  final SpeechProvider speechProvider;
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(bottom: 30),
@@ -857,6 +1005,33 @@ class _RunView extends StatelessWidget {
             onOpenErrors: onOpenErrors,
           ),
         if (run.reply != null) ...[
+          Align(
+            alignment: Alignment.centerRight,
+            child: ListenableBuilder(
+              listenable: speech,
+              builder: (context, _) => TextButton.icon(
+                onPressed: speech.speaking
+                    ? speech.stop
+                    : () async {
+                        await speech.speak(
+                          run.reply!.speech,
+                          provider: speechProvider,
+                        );
+                        if (!context.mounted || speech.error == null) return;
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(SnackBar(content: Text(speech.error!)));
+                      },
+                icon: Icon(
+                  speech.speaking
+                      ? Icons.stop_circle_outlined
+                      : Icons.volume_up_outlined,
+                  size: 17,
+                ),
+                label: Text(speech.speaking ? 'Stop reading' : 'Read reply'),
+              ),
+            ),
+          ),
           SelectableText(
             run.reply!.reply,
             style: const TextStyle(fontSize: 14, height: 1.8),
@@ -878,7 +1053,7 @@ class _RunView extends StatelessWidget {
                     ),
             ),
         ],
-        if (run.finished != null)
+        if (run.finished != null && !run.restored)
           Padding(
             padding: const EdgeInsets.only(top: 12),
             child: Text(

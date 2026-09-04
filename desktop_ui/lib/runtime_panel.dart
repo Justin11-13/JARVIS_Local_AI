@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import 'console_theme.dart';
 import 'jarvis_api.dart';
 import 'runtime_monitor.dart';
 
 String clockLabel(DateTime time) {
-  final local = time.toLocal();
-  return '${local.hour.toString().padLeft(2, '0')}:'
-      '${local.minute.toString().padLeft(2, '0')}:'
-      '${local.second.toString().padLeft(2, '0')}';
+  return DateFormat.Hms().format(time.toLocal());
 }
 
 class RuntimePanel extends StatelessWidget {

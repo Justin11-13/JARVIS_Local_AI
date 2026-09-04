@@ -18,6 +18,7 @@ if (-not (Test-Path -LiteralPath $Flutter)) {
 }
 
 $PreviousPubCache = $env:PUB_CACHE
+$PreviousPath = $env:Path
 $PreviousProcessDirectory = [Environment]::CurrentDirectory
 $DesktopExitCode = 1
 
@@ -51,6 +52,7 @@ try {
     Write-Error $_
 } finally {
     $env:PUB_CACHE = $PreviousPubCache
+    $env:Path = $PreviousPath
     [Environment]::CurrentDirectory = $PreviousProcessDirectory
     Pop-Location
 }

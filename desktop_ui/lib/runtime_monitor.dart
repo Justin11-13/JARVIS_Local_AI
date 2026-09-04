@@ -11,6 +11,8 @@ class RuntimeMonitor extends ChangeNotifier with WidgetsBindingObserver {
   final JarvisApi api;
   JarvisHealth? health;
   SystemSample? sample;
+  WindowsSpeechSettings? speechSettings;
+  String? speechSettingsError;
   final List<SystemSample> history = [];
   String? error;
   bool online = false;
@@ -77,6 +79,14 @@ class RuntimeMonitor extends ChangeNotifier with WidgetsBindingObserver {
         _healthChecked = DateTime.now();
       }
       final next = await api.telemetry();
+      if (_disposed) return;
+      try {
+        speechSettings = await api.windowsSpeechSettings();
+        speechSettingsError = null;
+      } on JarvisApiException catch (failure) {
+        speechSettings = null;
+        speechSettingsError = failure.message;
+      }
       if (_disposed) return;
       online = true;
       error = null;

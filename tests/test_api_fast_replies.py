@@ -6,22 +6,66 @@ from app.api import (
     _execute_gemini_safe_tool,
     chat_with_jarvis,
     fast_reply,
+    plain_display_text,
+    split_reply_for_speech,
 )
 from app.main import task_router
+from services.jarvis_memory import JarvisMemory
 
 
 class ApiFastReplyTests(unittest.TestCase):
+    def setUp(self):
+        memory_patch = patch("app.api.jarvis_memory", JarvisMemory(max_turns=20))
+        memory_patch.start()
+        self.addCleanup(memory_patch.stop)
+
     def test_exact_greeting_uses_the_local_fast_path(self):
-        self.assertEqual(fast_reply("  你好  "), "你好！我是 JARVIS。有什么可以帮你的吗？")
+        self.assertEqual(fast_reply("  你好  "), "你好！我是 JARVIS。有什么可以帮你？")
 
     def test_question_stays_on_the_codex_migration_path(self):
         self.assertIsNone(fast_reply("你好，你可以做什么？"))
+
+    def test_reply_protocol_keeps_display_and_english_narration_separate(self):
+        display, speech = split_reply_for_speech(
+            "[DISPLAY]\n您好。\n[VOICE_EN]\nHello."
+        )
+
+        self.assertEqual(display, "您好。")
+        self.assertEqual(speech, "Hello.")
+
+    def test_display_text_removes_markdown_emphasis_but_preserves_code(self):
+        display = plain_display_text(
+            "***System management***\n* Check CPU\n```python\nvalue = ** 2\n```"
+        )
+
+        self.assertIn("System management", display)
+        self.assertIn("• Check CPU", display)
+        self.assertNotIn("***System", display)
+        self.assertIn("value = ** 2", display)
 
     def test_fast_path_needs_no_reasoning_backend(self):
         result = chat_with_jarvis(ChatRequest(message="hello"))
 
         self.assertEqual(result["tool_results"], [])
         self.assertIn("JARVIS", result["reply"])
+
+    @patch("app.api.gemini")
+    def test_capability_question_is_an_immediate_bilingual_fast_reply(self, gemini):
+        result = chat_with_jarvis(ChatRequest(message="你能做什么？"))
+
+        self.assertIn("CPU", result["reply"])
+        self.assertIn("I can check CPU", result["speech"])
+        self.assertEqual(result["tool_results"], [])
+        gemini.generate_response.assert_not_called()
+
+    def test_chat_history_returns_completed_local_turns(self):
+        from app.api import chat_history
+
+        chat_with_jarvis(ChatRequest(message="hello"))
+
+        history = chat_history()["turns"]
+        self.assertEqual(history[0]["user"], "hello")
+        self.assertIn("JARVIS", history[0]["assistant"])
 
     @patch("app.api.gemini")
     def test_unconfigured_gemini_does_not_send_general_chat(self, gemini):
@@ -52,7 +96,7 @@ class ApiFastReplyTests(unittest.TestCase):
         gemini.generate_response.return_value = {
             "success": True,
             "status": "completed",
-            "result": "这是 Gemini 的回答。",
+            "result": "[DISPLAY]\n这是 Gemini 的回答。\n[VOICE_EN]\nThis is Gemini's answer.",
             "error": "",
         }
 
@@ -63,6 +107,7 @@ class ApiFastReplyTests(unittest.TestCase):
         self.assertEqual(args, ("帮我解释这个 Python error",))
         self.assertTrue(callable(kwargs["execute_tool"]))
         self.assertEqual(result["reply"], "这是 Gemini 的回答。")
+        self.assertEqual(result["speech"], "This is Gemini's answer.")
         self.assertEqual(result["tool_results"][0]["status"], "completed")
         task_router.pending_action_request = None
 

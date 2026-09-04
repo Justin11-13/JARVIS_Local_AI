@@ -1,4 +1,6 @@
 import unittest
+from pathlib import Path
+import tempfile
 
 from services.jarvis_memory import JarvisMemory
 
@@ -29,6 +31,48 @@ class JarvisMemoryTests(unittest.TestCase):
         memory.remember("question", "answer")
         memory.clear()
         self.assertEqual(memory.gemini_contents(), [])
+
+    def test_persistent_history_survives_a_new_memory_instance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "conversation.json"
+            first = JarvisMemory(
+                max_turns=10,
+                context_turns=1,
+                storage_path=path,
+            )
+            first.remember(
+                "第一题",
+                "第一个回答",
+                "The first answer.",
+            )
+            first.remember(
+                "第二题 password=hunter2",
+                "第二个回答",
+                "The second answer.",
+            )
+
+            restored = JarvisMemory(
+                max_turns=10,
+                context_turns=1,
+                storage_path=path,
+            )
+
+            self.assertEqual(len(restored.history()), 2)
+            self.assertIn("password=[REDACTED]", restored.history()[1]["user"])
+            self.assertNotIn("hunter2", path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                restored.gemini_contents(),
+                [
+                    {
+                        "role": "user",
+                        "parts": [{"text": "第二题 password=[REDACTED]"}],
+                    },
+                    {
+                        "role": "model",
+                        "parts": [{"text": "第二个回答"}],
+                    },
+                ],
+            )
 
 
 if __name__ == "__main__":
