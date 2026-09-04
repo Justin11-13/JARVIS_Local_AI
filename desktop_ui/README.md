@@ -127,6 +127,12 @@ explicitly planned or read-only. Appearance/monitor preferences last for this
 app session. The permission preview is a demonstration and never authorizes
 execution.
 
+Settings also includes an Obsidian knowledge panel. It registers a local vault
+with an excluded-by-default policy, reports indexed chunks, supports explicit
+reindexing, and disconnects a vault without deleting any note. Assistant
+responses render source chips; Obsidian citations open the original note through
+the local Core and the official `obsidian://` protocol.
+
 ## Checks
 
 ```powershell

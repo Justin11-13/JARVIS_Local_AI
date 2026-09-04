@@ -17,9 +17,12 @@ from services.rag.embedding import (
 from services.rag.vector_store import (
     VectorStore,
 )
+from services.rag.keyword_store import KeywordStore
 
 
-INDEX_VERSION = 4
+INDEX_VERSION = 6
+CHUNKING_STRATEGY = "markdown-hierarchy-v1"
+EMBEDDING_STRATEGY = "source-metadata-hierarchy-content-v1"
 
 
 DEFAULT_MANIFEST_PATH = Path(
@@ -50,6 +53,9 @@ def current_index_config() -> dict:
         "embedding_model": DEFAULT_MODEL_NAME,
         "chunk_size": DEFAULT_CHUNK_SIZE,
         "overlap": DEFAULT_OVERLAP,
+        "chunking_strategy": CHUNKING_STRATEGY,
+        "embedding_strategy": EMBEDDING_STRATEGY,
+        "keyword_strategy": "sqlite-fts5-v1",
     }
 
 
@@ -167,6 +173,7 @@ def rebuild_index(
     documents: list[dict],
     current_hashes: dict[str, str],
     vector_store: VectorStore,
+    keyword_store: KeywordStore,
 ) -> None:
     """
     Completely rebuild the vector index.
@@ -182,6 +189,7 @@ def rebuild_index(
     )
 
     vector_store.reset()
+    keyword_store.clear()
 
     chunks = chunk_documents(
         documents
@@ -206,6 +214,7 @@ def rebuild_index(
         vector_store.add_chunks(
             embedded_chunks
         )
+        keyword_store.upsert_chunks(chunks)
 
     save_manifest(
         current_hashes
@@ -238,9 +247,7 @@ def update_index() -> None:
     }
 
     current_hashes = {
-        source: calculate_content_hash(
-            document["content"]
-        )
+        source: calculate_content_hash(document.get("index_material", document["content"]))
         for source, document
         in current_documents.items()
     }
@@ -262,6 +269,7 @@ def update_index() -> None:
     )
 
     vector_store = VectorStore()
+    keyword_store = KeywordStore()
 
     print(
         f"Knowledge documents: "
@@ -279,6 +287,7 @@ def update_index() -> None:
             documents=documents,
             current_hashes=current_hashes,
             vector_store=vector_store,
+            keyword_store=keyword_store,
         )
 
         return
@@ -388,10 +397,12 @@ def update_index() -> None:
             vector_store.delete_by_source(
                 source
             )
+            keyword_store.delete_by_source(source)
 
         vector_store.add_chunks(
             embedded_chunks
         )
+        keyword_store.upsert_chunks(chunks)
 
     # --------------------------------------------------
     # Deleted documents
@@ -406,6 +417,7 @@ def update_index() -> None:
         vector_store.delete_by_source(
             source
         )
+        keyword_store.delete_by_source(source)
 
     save_manifest(
         current_hashes

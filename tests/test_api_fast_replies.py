@@ -111,6 +111,31 @@ class ApiFastReplyTests(unittest.TestCase):
         self.assertEqual(result["tool_results"][0]["status"], "completed")
         task_router.pending_action_request = None
 
+    @patch("app.api._get_rag_service")
+    @patch("app.api.gemini")
+    def test_rag_answer_does_not_expose_unrelated_local_tools(self, gemini, get_rag_service):
+        gemini.is_configured.return_value = True
+        get_rag_service.return_value.build_augmented_message.return_value = {
+            "message": "Question plus retrieved Obsidian context",
+            "used_rag": True,
+            "sources": [{"title": "JARVIS Test", "source": "JARVIS Test.md"}],
+            "chunks": [{"content": "This is the test note."}],
+        }
+        gemini.generate_response.return_value = {
+            "success": True,
+            "status": "completed",
+            "result": "测试笔记记录了 Obsidian 与 JARVIS 的连接。",
+            "error": "",
+        }
+
+        result = chat_with_jarvis(ChatRequest(message="我的 Obsidian 测试笔记写了什么？"))
+
+        _, kwargs = gemini.generate_response.call_args
+        self.assertIsNone(kwargs["execute_tool"])
+        self.assertEqual(kwargs["memory_contents"], [])
+        self.assertIn("测试笔记", result["reply"])
+        self.assertTrue(result["used_rag"])
+
     @patch("app.api._execute_native_tool")
     def test_gemini_safe_tool_allows_only_exact_registered_project_arguments(self, execute_native_tool):
         execute_native_tool.return_value = {"success": True, "status": "completed", "result": "Clean."}

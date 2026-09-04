@@ -1,0 +1,11 @@
+{
+  "vaults": [
+    {
+      "id": "main-vault",
+      "name": "My Vault",
+      "path": "C:\\Users\\YourName\\Documents\\Obsidian Vault",
+      "enabled": true,
+      "default_access": "excluded"
+    }
+  ]
+}

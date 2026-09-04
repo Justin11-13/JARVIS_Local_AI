@@ -624,6 +624,7 @@ class _PlannedFeature extends StatelessWidget {
 class SettingsPage extends StatelessWidget {
   const SettingsPage({
     super.key,
+    required this.api,
     required this.monitor,
     required this.solid,
     required this.reduceMotion,
@@ -635,6 +636,7 @@ class SettingsPage extends StatelessWidget {
     required this.autoReadReplies,
     required this.onAutoReadReplies,
   });
+  final JarvisApi api;
   final RuntimeMonitor monitor;
   final bool solid;
   final bool reduceMotion;
@@ -694,6 +696,8 @@ class SettingsPage extends StatelessWidget {
           ],
         ),
       ),
+      const SizedBox(height: 18),
+      ObsidianVaultPanel(api: api, solid: solid),
       const SizedBox(height: 18),
       ConsolePanel(
         solid: solid,
@@ -917,6 +921,241 @@ class SettingsPage extends StatelessWidget {
         ),
       ),
     ],
+  );
+}
+
+class ObsidianVaultPanel extends StatefulWidget {
+  const ObsidianVaultPanel({super.key, required this.api, required this.solid});
+  final JarvisApi api;
+  final bool solid;
+  @override
+  State<ObsidianVaultPanel> createState() => _ObsidianVaultPanelState();
+}
+
+class _ObsidianVaultPanelState extends State<ObsidianVaultPanel> {
+  final _name = TextEditingController();
+  final _path = TextEditingController();
+  List<ObsidianVault> _vaults = const [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _path.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final vaults = await widget.api.obsidianVaults();
+      if (mounted) setState(() => _vaults = vaults);
+    } on JarvisApiException catch (failure) {
+      if (mounted) setState(() => _error = failure.message);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  String _idFor(String value) {
+    final normalized = value
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9_-]+'), '-')
+        .replaceAll(RegExp(r'^-+|-+$'), '');
+    return normalized.isEmpty ? 'obsidian-vault' : normalized;
+  }
+
+  Future<void> _add() async {
+    if (_name.text.trim().isEmpty || _path.text.trim().isEmpty) {
+      setState(
+        () => _error = 'Enter a vault name and its full Windows folder path.',
+      );
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await widget.api.registerObsidianVault(
+        id: _idFor(_name.text),
+        name: _name.text.trim(),
+        path: _path.text.trim(),
+      );
+      _name.clear();
+      _path.clear();
+      await _load();
+    } on JarvisApiException catch (failure) {
+      if (mounted) {
+        setState(() {
+          _error = failure.message;
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _remove(ObsidianVault vault) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Disconnect Obsidian vault?'),
+        content: Text(
+          '${vault.name} will be removed from JARVIS indexing. Your Obsidian files will not be deleted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Disconnect'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await widget.api.removeObsidianVault(vault.id);
+      await _load();
+    } on JarvisApiException catch (failure) {
+      if (mounted) setState(() => _error = failure.message);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => ConsolePanel(
+    solid: widget.solid,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            Icon(
+              Icons.auto_stories_outlined,
+              size: 18,
+              color: ConsoleColors.accent,
+            ),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Obsidian knowledge',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Only notes marked jarvis_access: rag are sent to Gemini. Vault paths stay inside JARVIS Core.',
+          style: TextStyle(
+            color: ConsoleColors.muted,
+            fontSize: 12,
+            height: 1.6,
+          ),
+        ),
+        if (_loading)
+          const Padding(
+            padding: EdgeInsets.only(top: 14),
+            child: LinearProgressIndicator(),
+          ),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 14),
+            child: Text(
+              _error!,
+              style: const TextStyle(
+                color: ConsoleColors.warning,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        for (final vault in _vaults)
+          Padding(
+            padding: const EdgeInsets.only(top: 14),
+            child: Row(
+              children: [
+                const Icon(Icons.folder_outlined, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        vault.name,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      Text(
+                        '${vault.indexedChunks} indexed chunks · default ${vault.defaultAccess}',
+                        style: const TextStyle(
+                          color: ConsoleColors.muted,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                StatusLabel('Connected', color: ConsoleColors.good),
+                IconButton(
+                  tooltip: 'Disconnect vault',
+                  onPressed: _loading ? null : () => _remove(vault),
+                  icon: const Icon(Icons.link_off, size: 18),
+                ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _name,
+          decoration: const InputDecoration(labelText: 'Vault name'),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _path,
+          decoration: const InputDecoration(
+            labelText: 'Full Windows vault path',
+            hintText: r'C:\...\My Vault',
+          ),
+        ),
+        const SizedBox(height: 12),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            FilledButton.icon(
+              onPressed: _loading ? null : _add,
+              icon: const Icon(Icons.add_link, size: 17),
+              label: const Text('Connect and index'),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: _loading
+                  ? null
+                  : () async {
+                      try {
+                        await widget.api.reindexObsidian();
+                        await _load();
+                      } on JarvisApiException catch (failure) {
+                        if (mounted) setState(() => _error = failure.message);
+                      }
+                    },
+              icon: const Icon(Icons.sync, size: 17),
+              label: const Text('Reindex'),
+            ),
+          ],
+        ),
+      ],
+    ),
   );
 }
 

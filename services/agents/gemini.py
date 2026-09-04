@@ -21,7 +21,13 @@ class GeminiAdapter:
     """Send user requests to Gemini; Python retains all execution authority."""
 
     API_URL_TEMPLATE = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-    MAX_LOCAL_TOOL_CALLS = 3
+    MAX_LOCAL_TOOL_CALLS = 20
+
+    LOCAL_TOOL_LIMITS = {
+        "simple": 5,
+        "standard": 20,
+        "heavy": 50,
+    }
     SYSTEM_INSTRUCTION = JARVIS_SYSTEM_PROMPT
 
     # These are the current native JARVIS tools. Python validates every model
@@ -204,6 +210,57 @@ class GeminiAdapter:
             "name": "sleep_computer",
             "description": "Put Windows to sleep. This is high risk and requires one user confirmation.",
             "parameters": {"type": "object", "properties": {}},
+        },
+        {
+            "name": "search_obsidian_notes",
+            "description": "Search notes in configured Obsidian vaults. This is read-only.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "keyword": {"type": "string"},
+                    "vault_id": {"type": "string", "description": "Optional configured vault ID."},
+                },
+                "required": ["keyword"],
+            },
+        },
+        {
+            "name": "open_obsidian_note",
+            "description": "Open an existing note in its configured Obsidian vault.",
+            "parameters": {
+                "type": "object",
+                "properties": {"vault_id": {"type": "string"}, "relative_path": {"type": "string"}},
+                "required": ["vault_id", "relative_path"],
+            },
+        },
+        {
+            "name": "create_obsidian_note",
+            "description": "Create a new Markdown note after user confirmation. Never overwrites an existing note.",
+            "parameters": {
+                "type": "object",
+                "properties": {"vault_id": {"type": "string"}, "relative_path": {"type": "string"}, "content": {"type": "string"}},
+                "required": ["vault_id", "relative_path", "content"],
+            },
+        },
+        {
+            "name": "append_obsidian_note",
+            "description": "Append text to an existing Markdown note after user confirmation.",
+            "parameters": {
+                "type": "object",
+                "properties": {"vault_id": {"type": "string"}, "relative_path": {"type": "string"}, "content": {"type": "string"}},
+                "required": ["vault_id", "relative_path", "content"],
+            },
+        },
+        {
+            "name": "update_obsidian_note",
+            "description": "Replace one exact passage in an existing Obsidian note after showing a preview and receiving confirmation.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "vault_id": {"type": "string"}, "relative_path": {"type": "string"},
+                    "expected_text": {"type": "string"}, "replacement_text": {"type": "string"},
+                },
+                "required": ["vault_id", "relative_path", "expected_text", "replacement_text"],
+            },
         },
     ]
 

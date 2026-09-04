@@ -92,12 +92,6 @@ reasoning context. Error reports and UI preferences remain session-only. See the
   keep a small bounded conversation context, and request only declared JARVIS
   tools. It never receives a shell, unrestricted Windows access, or the API key itself.
   See [Gemini BYOK setup](#gemini-byok-setup) before enabling it.
-- **Open Interpreter safety foundation / 安全基础:** workspace validation,
-  manual/ask/automatic modes, risk classification, confirmation, task records,
-  and notifications are implemented. When explicitly invoked through the
-  router and available on PATH, it can run a bounded local task such as opening
-  an application; the Desktop chat does not yet create a new Open Interpreter
-  task from free-form text.
 - **Chat / 聊天:** exact greetings work locally without an API key. With Gemini
   enabled, a normal request may call a validated native tool. A high-risk
   action—locking, sleeping, restarting, or shutting down Windows—stops for one
@@ -297,23 +291,6 @@ Example:
 
 should not be allowed to expose files outside the registered project.
 
-### Open Interpreter Routing
-
-Open Interpreter is an optional execution backend for complex local workflows
-that are not covered by JARVIS native tools. JARVIS keeps routing and safety
-policy in `services/task_router.py`.
-
-Current routing modes:
-
-- `manual`: Open Interpreter runs only when the user explicitly requests it.
-- `ask`: JARVIS requests confirmation before non-explicit delegation.
-- `automatic`: low-risk read-only tasks may run directly; medium-risk and
-  high-risk tasks require confirmation.
-
-Open Interpreter always requires an explicit existing subdirectory as its
-workspace. Current directories, drive roots, and missing directories are
-rejected. Pending requests can be confirmed or cancelled before execution.
-
 ### Development Auto-Reload
 
 JARVIS includes a development workflow using `watchfiles`.
@@ -420,7 +397,6 @@ JARVIS_Local_AI/
 │   ├── task_router.py
 │   ├── system_telemetry.py
 │   └── agents/
-│       └── open_interpreter.py
 │
 ├── skills/
 │   ├── files.py
@@ -779,9 +755,7 @@ shortcut or launch the UI; the `PUB_CACHE` assignment applies to this shell.
 
 JARVIS uses allow-listed native tools and Python-enforced routing decisions.
 
-The normal native-tool path does not expose arbitrary shell execution to
-Gemini. The optional Open Interpreter adapter is a separate dynamic executor;
-review its workspace, requested work, and confirmation carefully.
+The native-tool path does not expose arbitrary shell execution to Gemini.
 
 ### Currently Allowed
 
@@ -816,12 +790,6 @@ Native tools do not provide:
 - Git push
 - System configuration changes
 - Administrator-level system operations
-
-Open Interpreter can perform broader local work when its routing policy allows
-it. In automatic mode, low-risk work may proceed directly; medium/high-risk
-work requires confirmation. Risk classification currently uses keyword rules,
-not a complete operating-system sandbox. Workspace validation and confirmation
-are safeguards, not a guarantee that arbitrary generated code is safe.
 
 The desktop API binds to loopback when launched by the supplied scripts. Do not
 expose it to a network. The full permission/trust model described below remains
@@ -864,9 +832,9 @@ config/project_roots.example.json
 ## Development Status
 
 JARVIS is an experimental Windows desktop assistant with a working Flutter UI,
-loopback API, guarded native Windows tools, live telemetry, Gemini BYOK chat,
-and guarded Open Interpreter delegation. Its former local-model loop has been
-removed. The ChatGPT UI and Codex executors remain planned integrations.
+loopback API, guarded native Windows tools, live telemetry, and Gemini BYOK
+chat. Its former local-model loop has been removed. The ChatGPT UI and Codex
+executors remain planned integrations.
 
 The current product foundation includes the desktop shortcut, Assistant / Tasks /
 Device / Settings / Errors pages, and session-only diagnostics. Voice input,
@@ -919,10 +887,10 @@ Notify user
           │                 │                  │
           └──────────── TaskRouter ───────────┘
                             │
-        ┌───────────────────┼───────────────────┐
-        ▼                   ▼                   ▼
-  Python / PowerShell    ChatGPT UI        Specialist Executors
-  Native small tasks       + Codex          Open Interpreter (on demand)
+        ┌───────────────────┴───────────────────┐
+        ▼                                       ▼
+  Python / PowerShell                        ChatGPT UI + Codex
+  Native small tasks                        Specialist agents
                             │
                       Permission Layer
                             │
@@ -932,9 +900,9 @@ Notify user
 ~~~
 
 **Implemented foundation:** native tools, TaskRouter, TaskManager, terminal
-notifications, Open Interpreter routing safeguards, a loopback FastAPI service,
-and the Flutter desktop app with live telemetry, session diagnostics, and a
-desktop shortcut. The local-model conversation loop has been removed.
+notifications, a loopback FastAPI service, and the Flutter desktop app with
+live telemetry, session diagnostics, and a desktop shortcut. The local-model
+conversation loop has been removed.
 
 **Planned:** the permission boundary for every executor, authenticated ChatGPT
 UI hand-off/result collection, Codex hand-off for coding tasks, voice,
@@ -950,7 +918,6 @@ system access; Python policy decides what is actually allowed.
 | Component | Role | Current status |
 | --- | --- | --- |
 | Native Python / PowerShell tools | Small supported actions such as opening apps, reading system information, project inspection, Git status, and read-only file access. | Implemented foundation; permission coverage is being expanded. |
-| Open Interpreter | On-demand bounded local execution when native tools are insufficient. | Implemented with explicit workspace validation, risk classification, and manual / ask / automatic modes. |
 | ChatGPT UI executor | Broader questions, web-assisted research, and visible-result collection through the authenticated ChatGPT interface. | Planned; no GPT API. |
 | Codex executor | Repository-scale coding, debugging, implementation, tests, and action proposals. | Planned; no unconfigured request is executed. |
 
@@ -958,7 +925,6 @@ Intended model routing:
 
 ~~~text
 Small supported work         → Native Python / PowerShell tool
-Bounded local workflow       → Open Interpreter when policy allows
 Question / research          → ChatGPT UI executor when configured
 Heavy coding / repo work     → Codex executor when configured
 ~~~
@@ -986,8 +952,7 @@ opening projects in VS Code, Git status, and read-only project file tools.
 **Planned:** closing applications, volume/media controls, browser automation,
 project test execution, Git diff, diagnostics, safe file changes, and
 dedicated hardware integrations. Hardware support must use a documented vendor
-API, CLI, or supported controller; Open Interpreter alone does not create
-hardware support.
+API, CLI, or supported controller.
 
 ### Voice, Desktop UI, and Settings
 
@@ -1044,7 +1009,7 @@ Permission check
  ↓
 Allowed?
  ├── No  → reject or offer a restricted safe action
- └── Yes → Native tool / Open Interpreter / future agent
+ └── Yes → Native tool / approved specialist agent
 ~~~
 
 The planned trust model has four levels:
@@ -1059,9 +1024,8 @@ The planned trust model has four levels:
 Voice verification is an additional trust signal, never the only authorization
 factor for destructive or privileged operations.
 
-**Implemented safeguards:** explicit Open Interpreter workspace requirements;
-manual, ask, and automatic routing modes; LOW / MEDIUM / HIGH risk
-classification; and confirmation for medium/high-risk automatic work.
+**Implemented safeguards:** Python-enforced permission evaluation and explicit
+confirmation for sensitive native or external actions.
 
 **Planned safeguards:** the full locked/restricted/trusted state model,
 credential protection, file-write permissions, terminal/PowerShell policy,
@@ -1081,10 +1045,10 @@ QUEUED → RUNNING → OBSERVING → COMPLETED
 Complex agents may retry a bounded, safe recovery loop before reporting a
 failure.
 
-**Implemented foundation:** managed Open Interpreter tasks track creation,
-start, completion, duration, result, and error; terminal notifications report
-completion or failure. The desktop Tasks page lists requests and results from
-the current UI session; it is not a durable or complete backend task archive.
+**Implemented foundation:** managed tasks track creation, start, completion,
+duration, result, and error; terminal notifications report completion or
+failure. The desktop Tasks page lists requests and results from the current UI
+session; it is not a durable or complete backend task archive.
 
 **Planned:** observation/retry policy, persistent task history, Windows notifications,
 desktop UI notifications, and voice notifications.
@@ -1127,16 +1091,12 @@ still planned. Loopback binding is not a substitute for a full permission model.
 - [x] Local-model dependencies and runtime loop removed.
 - [x] Project discovery, project registry, Git status, and read-only project
   file tools.
-- [x] Open Interpreter adapter, workspace validation, risk routing, pending
-  confirmation, task lifecycle records, terminal notification, and TaskRouter
-  extraction.
 
 #### Phase 1 — Safe Developer Workflow
 
 - [x] Route native state-changing actions through one Python permission gate.
 - [ ] Add direct Python/PowerShell execution for explicitly supported,
   low-risk operations.
-- [ ] Refine the existing on-demand Open Interpreter executor.
 - [x] Add Gemini BYOK understanding with Python-validated native tool calls.
 - [ ] Add a confirmation-gated ChatGPT UI executor without a GPT API.
 - [ ] Add a confirmation-gated Codex executor for heavy coding tasks.
@@ -1197,6 +1157,33 @@ user-local `.env`; Gemini can propose only the declared JARVIS tools, while
 Python applies routing, validation, and permission checks. Future ChatGPT UI
 and Codex integrations must preserve the same boundary and are never granted
 unrestricted computer control.
+
+---
+
+## Obsidian Knowledge
+
+JARVIS can use one or more local Obsidian vaults as an opt-in personal wiki.
+Connect a vault from **Settings → Obsidian knowledge**. Vault paths remain in
+the local Core configuration and are never included in chat responses.
+
+Notes are excluded by default. Add these properties to a note that JARVIS may
+retrieve and send to the configured Gemini provider:
+
+```markdown
+---
+title: Laravel Routing
+tags: [laravel, php]
+jarvis_access: rag
+status: current
+authority: personal
+---
+```
+
+Use `jarvis_access: local-only` for local search without adding the note body
+to Gemini context, or `jarvis_access: excluded` to ignore it. JARVIS skips
+protected folders such as `.obsidian`, `.trash`, and `.git`. Search and open
+operations are read-only; create, append, and exact-text update operations
+show a preview and require confirmation through `PermissionManager`.
 
 ---
 

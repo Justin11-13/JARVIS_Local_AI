@@ -162,8 +162,10 @@ def split_large_text(
 
 
 def build_embedding_content(
+    source: str,
     section_path: list[str],
     content: str,
+    metadata: dict | None = None,
 ) -> str:
     """
     Add hierarchy context to the text used for embedding.
@@ -173,17 +175,18 @@ def build_embedding_content(
     context for retrieval.
     """
 
-    if not section_path:
-        return content
+    hierarchy = " > ".join(section_path) or "(none)"
 
-    hierarchy = " > ".join(
-        section_path
-    )
-
-    return (
-        f"Section: {hierarchy}\n\n"
-        f"{content}"
-    )
+    lines = [f"Source: {source}"]
+    metadata = metadata or {}
+    if metadata.get("title"):
+        lines.append(f"Title: {metadata['title']}")
+    if metadata.get("aliases"):
+        lines.append(f"Aliases: {', '.join(metadata['aliases'])}")
+    if metadata.get("tags"):
+        lines.append(f"Tags: {', '.join(metadata['tags'])}")
+    lines.append(f"Section: {hierarchy}")
+    return "\n".join(lines) + f"\n\n{content}"
 
 
 def chunk_documents(
@@ -260,13 +263,20 @@ def chunk_documents(
             ):
                 embedding_content = (
                     build_embedding_content(
+                        source,
                         section_path,
                         chunk_content,
+                        document,
                     )
                 )
 
                 chunks.append(
                     {
+                        **{
+                            key: value
+                            for key, value in document.items()
+                            if key not in {"content", "index_material"}
+                        },
                         "source": source,
                         "chunk_id": chunk_id,
                         "section": heading,

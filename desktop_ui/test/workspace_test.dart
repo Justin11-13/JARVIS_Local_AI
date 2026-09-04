@@ -67,6 +67,9 @@ class FakeApi extends JarvisApi {
 
   @override
   Future<List<JarvisHistoryTurn>> conversationHistory() async => history;
+
+  @override
+  Future<List<ObsidianVault>> obsidianVaults() async => const [];
 }
 
 void main() {
@@ -111,7 +114,7 @@ void main() {
           await tester.tap(find.byKey(ValueKey('nav-$page')));
         }
         await tester.pumpAndSettle();
-        expect(tester.takeException(), isNull);
+        expect(tester.takeException(), isNull, reason: 'page $page at $size');
       }
       await unmount(tester);
     });

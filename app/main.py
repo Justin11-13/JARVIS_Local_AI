@@ -9,7 +9,6 @@ integration remains policy-controlled.
 from pathlib import Path
 
 from services.agents.gemini import GeminiAdapter
-from services.agents.open_interpreter import OpenInterpreterAdapter
 from services.byok_config import load_byok_config
 from services.notification_service import NotificationService
 from services.jarvis_memory import JarvisMemory
@@ -24,6 +23,7 @@ from skills.project import (
     refresh_project_registry,
 )
 from skills.system import get_system_info, open_app
+from skills.obsidian import append_obsidian_note, create_obsidian_note, open_obsidian_note, search_obsidian_notes, update_obsidian_note
 from skills.windows import (
     adjust_volume,
     get_battery_status,
@@ -40,12 +40,9 @@ from skills.windows import (
 )
 
 
-OPEN_INTERPRETER_ROUTING_MODE = "automatic"
-
 byok_config = load_byok_config()
 BRAIN_PROVIDER = byok_config.provider
 BRAIN_MODEL = byok_config.model
-open_interpreter = OpenInterpreterAdapter()
 gemini = GeminiAdapter()
 BRAIN_STATUS = "unsupported" if byok_config.error else ("configured" if gemini.is_configured() else "not_configured")
 task_manager = TaskManager()
@@ -61,8 +58,6 @@ jarvis_memory = JarvisMemory(
     ),
 )
 task_router = TaskRouter(
-    routing_mode=OPEN_INTERPRETER_ROUTING_MODE,
-    open_interpreter=open_interpreter,
     task_manager=task_manager,
     notification_service=notification_service,
 )
@@ -91,6 +86,11 @@ AVAILABLE_TOOLS = {
     "shutdown_computer": shutdown_computer,
     "restart_computer": restart_computer,
     "sleep_computer": sleep_computer,
+    "search_obsidian_notes": search_obsidian_notes,
+    "open_obsidian_note": open_obsidian_note,
+    "create_obsidian_note": create_obsidian_note,
+    "append_obsidian_note": append_obsidian_note,
+    "update_obsidian_note": update_obsidian_note,
 }
 
 
@@ -150,7 +150,6 @@ def run_jarvis() -> None:
     print("=" * 60)
     print("JARVIS v0.6")
     print(f"Reasoning backend: {BRAIN_PROVIDER} ({BRAIN_STATUS})")
-    print(f"Open Interpreter mode: {OPEN_INTERPRETER_ROUTING_MODE}")
     print("输入 exit 退出")
     print("=" * 60)
 

@@ -7,6 +7,7 @@ cannot turn JARVIS tools into a network service.
 
 from __future__ import annotations
 
+import json
 import re
 from threading import Lock, Timer
 from typing import Any
@@ -26,7 +27,8 @@ from app.main import (
     task_router,
 )
 from services.native_intent import resolve_native_intent
-from services.rag.knowledge_router import should_use_rag
+from services.rag.knowledge_router import route_knowledge
+from services.rag.source_registry import load_obsidian_vaults, remove_obsidian_vault, save_obsidian_vault
 from services.system_telemetry import read_system_telemetry
 from services.fish_speech_service import FishSpeechError, FishSpeechService
 from services.windows_speech_service import WindowsSpeechError, WindowsSpeechService
@@ -86,7 +88,8 @@ def _get_rag_service() -> Any:
                 print(
                     f"[RAG] Knowledge index update failed: {error}"
                 )
-            finally:
+                raise
+            else:
                 _rag_index_ready = True
 
         if _rag_service is None:
@@ -195,6 +198,18 @@ class ToolRequest(BaseModel):
         default="",
         max_length=500,
     )
+
+
+class ObsidianVaultRequest(BaseModel):
+    vault_id: str = Field(min_length=1, max_length=80)
+    name: str = Field(min_length=1, max_length=200)
+    path: str = Field(min_length=1, max_length=1000)
+    default_access: str = Field(default="excluded", max_length=20)
+
+
+class ObsidianOpenRequest(BaseModel):
+    vault_id: str = Field(min_length=1, max_length=80)
+    relative_path: str = Field(min_length=1, max_length=500)
 
 
 # ---------------------------------------------------------------------------
@@ -405,6 +420,26 @@ GEMINI_LOCAL_TOOL_SCHEMAS = {
         set(),
         set(),
     ),
+    "search_obsidian_notes": (
+        {"keyword"},
+        {"vault_id"},
+    ),
+    "open_obsidian_note": (
+        {"vault_id", "relative_path"},
+        set(),
+    ),
+    "create_obsidian_note": (
+        {"vault_id", "relative_path", "content"},
+        set(),
+    ),
+    "append_obsidian_note": (
+        {"vault_id", "relative_path", "content"},
+        set(),
+    ),
+    "update_obsidian_note": (
+        {"vault_id", "relative_path", "expected_text", "replacement_text"},
+        set(),
+    ),
 }
 
 
@@ -500,7 +535,9 @@ def _execute_gemini_safe_tool(
 
     for key, value in arguments.items():
         maximum_length = (
-            500
+            12_000
+            if key in {"content", "expected_text", "replacement_text"}
+            else 500
             if key in {
                 "relative_path",
                 "keyword",
@@ -720,6 +757,7 @@ def _chat_response(
     reply: str,
     tool_results: list[dict[str, Any]],
     speech_reply: str | None = None,
+    rag_result: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Return the API response and retain the completed
@@ -735,11 +773,18 @@ def _chat_response(
         narration,
     )
 
-    return {
+    response = {
         "reply": display_reply,
         "speech": narration,
         "tool_results": tool_results,
     }
+    if rag_result:
+        response.update({
+            "used_rag": bool(rag_result.get("used_rag")),
+            "knowledge_domains": rag_result.get("domains", []),
+            "citations": rag_result.get("citations", []),
+        })
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -758,13 +803,75 @@ def health() -> dict[str, Any]:
         "brain": BRAIN_PROVIDER,
         "brain_model": BRAIN_MODEL,
         "brain_status": BRAIN_STATUS,
-        "routing_mode": (
-            task_router.routing_mode
-        ),
         "task_count": len(
             task_manager.list_tasks()
         ),
     }
+
+
+def _reset_rag_runtime() -> None:
+    global _rag_index_ready, _rag_service
+    with _rag_lock:
+        _rag_index_ready = False
+        _rag_service = None
+
+
+@app.get("/api/obsidian/vaults")
+def obsidian_vaults() -> dict[str, Any]:
+    vaults = []
+    for vault in load_obsidian_vaults():
+        indexed_chunks = 0
+        try:
+            service = _get_rag_service()
+            indexed_chunks = len(service.retriever.vector_store.collection.get(where={"vault_id": vault["id"]}, include=[]).get("ids", []))
+        except Exception as error:
+            print(f"[RAG] Warning: could not count Obsidian chunks: {error}")
+        vaults.append({
+            "id": vault["id"], "name": vault["name"], "enabled": True,
+            "default_access": vault["default_access"], "indexed_chunks": indexed_chunks,
+        })
+    return {"vaults": vaults}
+
+
+@app.post("/api/obsidian/vaults")
+def register_obsidian_vault(request: ObsidianVaultRequest) -> dict[str, Any]:
+    try:
+        entry = save_obsidian_vault(request.vault_id, request.name, request.path, request.default_access)
+        _reset_rag_runtime()
+        _get_rag_service()
+    except (OSError, ValueError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return {"id": entry["id"], "name": entry["name"], "enabled": True, "default_access": entry["default_access"]}
+
+
+@app.delete("/api/obsidian/vaults/{vault_id}")
+def unregister_obsidian_vault(vault_id: str) -> dict[str, Any]:
+    try:
+        removed = remove_obsidian_vault(vault_id)
+        if removed:
+            _reset_rag_runtime()
+            _get_rag_service()
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    if not removed:
+        raise HTTPException(status_code=404, detail="Obsidian vault was not found.")
+    return {"removed": True, "id": vault_id}
+
+
+@app.post("/api/obsidian/reindex")
+def reindex_obsidian() -> dict[str, Any]:
+    _reset_rag_runtime()
+    service = _get_rag_service()
+    return {"status": "completed", "stored_vectors": service.retriever.vector_store.count()}
+
+
+@app.post("/api/obsidian/open")
+def open_obsidian_source(request: ObsidianOpenRequest) -> dict[str, Any]:
+    return _execute_native_tool(
+        "open_obsidian_note",
+        {"vault_id": request.vault_id, "relative_path": request.relative_path},
+        "Open the selected Obsidian citation.",
+    )
 
 
 @app.get("/api/system-info")
@@ -1057,12 +1164,14 @@ def chat_with_jarvis(
         # 5. Knowledge routing + RAG retrieval
         # ---------------------------------------------------
 
-        if should_use_rag(user_input):
+        knowledge_route = route_knowledge(user_input)
+        if knowledge_route.use_rag:
             try:
                 rag_result = (
                     _get_rag_service()
                     .build_augmented_message(
-                        user_input
+                        user_input,
+                        domains=knowledge_route.domains,
                     )
                 )
 
@@ -1092,6 +1201,21 @@ def chat_with_jarvis(
             if rag_result["used_rag"]
             else user_input
         )
+
+        # Retrieved knowledge is already the complete context for a RAG answer.
+        # Do not expose unrelated local action tools on this path: some models
+        # otherwise keep proposing system/file tools instead of answering from
+        # the supplied sources, eventually hitting the bounded tool-call guard.
+        gemini_tool_executor = None
+        if not rag_result["used_rag"]:
+            gemini_tool_executor = (
+                lambda function_name, arguments:
+                _execute_gemini_safe_tool(
+                    function_name,
+                    arguments,
+                    user_input,
+                )
+            )
         
         # ---------------------------------------------------
         # 6. Gemini reasoning
@@ -1106,15 +1230,7 @@ def chat_with_jarvis(
                 execute=lambda: (
                     gemini.generate_response(
                         gemini_input,
-                        execute_tool=(
-                            lambda function_name,
-                            arguments:
-                            _execute_gemini_safe_tool(
-                                function_name,
-                                arguments,
-                                user_input,
-                            )
-                        ),
+                        execute_tool=gemini_tool_executor,
                         memory_contents=(
                             jarvis_memory
                             .gemini_contents()
@@ -1142,4 +1258,5 @@ def chat_with_jarvis(
                     result
                 )
             ],
+            rag_result=rag_result,
         )

@@ -36,15 +36,18 @@ class PermissionManager:
         "get_system_info", "list_projects", "get_project_info", "git_status", "list_files",
         "read_file", "search_files", "get_battery_status", "get_network_status",
         "list_running_processes",
+        "search_obsidian_notes",
     }
     EXPLICIT_LOCAL_ACTIONS = {
         "open_app", "open_project", "refresh_project_registry", "adjust_volume", "toggle_mute",
         "media_control", "open_known_folder", "open_windows_setting",
+        "open_obsidian_note",
     }
     CONFIRMATION_REQUIRED_ACTIONS = {
         "write_file", "edit_file", "delete_file", "install_software", "admin_command", "git_commit",
         "git_push", "browser_submit", "lock_computer", "shutdown_computer", "restart_computer",
         "sleep_computer",
+        "create_obsidian_note", "append_obsidian_note", "update_obsidian_note",
     }
     HIGH_RISK_ACTIONS = {
         "delete_file", "admin_command", "shutdown_computer", "restart_computer", "sleep_computer",

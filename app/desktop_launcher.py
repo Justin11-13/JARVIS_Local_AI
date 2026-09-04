@@ -28,7 +28,6 @@ def api_ready() -> bool:
             isinstance(health, dict)
             and health.get("status") == "ready"
             and isinstance(health.get("brain"), str)
-            and isinstance(health.get("routing_mode"), str)
         )
     except (OSError, URLError, ValueError):
         return False

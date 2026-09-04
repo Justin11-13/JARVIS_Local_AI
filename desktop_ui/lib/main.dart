@@ -290,6 +290,7 @@ class _DesktopWorkspaceState extends State<DesktopWorkspace> {
       speechProvider: _speechProvider,
     ),
     3 => SettingsPage(
+      api: _api,
       monitor: _monitor,
       solid: _reduceTransparency,
       reduceMotion: _reduceMotion,
@@ -319,6 +320,7 @@ class _DesktopWorkspaceState extends State<DesktopWorkspace> {
                   padding: const EdgeInsets.fromLTRB(28, 24, 28, 16),
                   itemCount: _runs.length,
                   itemBuilder: (context, index) => _RunView(
+                    api: _api,
                     run: _runs[index],
                     runIndex: index,
                     reduceMotion: _reduceMotion,
@@ -930,6 +932,7 @@ class _Composer extends StatelessWidget {
 
 class _RunView extends StatelessWidget {
   const _RunView({
+    required this.api,
     required this.run,
     required this.runIndex,
     required this.reduceMotion,
@@ -937,6 +940,7 @@ class _RunView extends StatelessWidget {
     required this.speech,
     required this.speechProvider,
   });
+  final JarvisApi api;
   final SessionRun run;
   final int runIndex;
   final bool reduceMotion;
@@ -1036,6 +1040,53 @@ class _RunView extends StatelessWidget {
             run.reply!.reply,
             style: const TextStyle(fontSize: 14, height: 1.8),
           ),
+          if (run.reply!.citations.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Text(
+              'SOURCES',
+              style: metadataStyle.copyWith(fontSize: 10, letterSpacing: 1.2),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final citation in run.reply!.citations)
+                  ActionChip(
+                    avatar: Icon(
+                      citation.uri.isEmpty
+                          ? Icons.description_outlined
+                          : Icons.auto_stories_outlined,
+                      size: 16,
+                      color: ConsoleColors.accent,
+                    ),
+                    label: Text(
+                      citation.section.isEmpty
+                          ? citation.title
+                          : '${citation.title} · ${citation.section}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    tooltip: citation.sourcePath,
+                    onPressed: citation.uri.isEmpty
+                        ? null
+                        : () async {
+                            try {
+                              await api.openObsidianNote(
+                                citation.vaultId,
+                                citation.sourcePath,
+                              );
+                            } on JarvisApiException catch (failure) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(failure.message)),
+                                );
+                              }
+                            }
+                          },
+                  ),
+              ],
+            ),
+          ],
           for (final (index, result) in run.reply!.toolResults.indexed)
             Padding(
               padding: const EdgeInsets.only(top: 12),

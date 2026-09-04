@@ -104,7 +104,7 @@ class DesktopLauncherTests(unittest.TestCase):
 
     def test_health_requires_a_jarvis_shaped_response(self):
         for body, expected in (
-            (b'{"status":"ready","brain":"codex","routing_mode":"ask"}', True),
+            (b'{"status":"ready","brain":"codex"}', True),
             (b'{"status":"ready"}', False),
             (b'[]', False),
             (b'not json', False),

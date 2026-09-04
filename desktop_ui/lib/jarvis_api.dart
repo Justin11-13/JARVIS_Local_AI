@@ -21,7 +21,6 @@ class JarvisApi {
     return JarvisHealth(
       status: response['status'] as String? ?? 'unknown',
       brain: response['brain'] as String? ?? 'unknown',
-      routingMode: response['routing_mode'] as String? ?? 'unknown',
     );
   }
 
@@ -46,6 +45,51 @@ class JarvisApi {
           'No response was returned.',
       toolResults: (response['tool_results'] as List<dynamic>? ?? const [])
           .cast<Map<String, dynamic>>(),
+      citations: (response['citations'] as List<dynamic>? ?? const [])
+          .map(
+            (item) => ObsidianCitation.fromJson(item as Map<String, dynamic>),
+          )
+          .toList(),
+    );
+  }
+
+  Future<List<ObsidianVault>> obsidianVaults() async {
+    final response = await _request('GET', '/api/obsidian/vaults');
+    return (response['vaults'] as List<dynamic>? ?? const [])
+        .map((item) => ObsidianVault.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> registerObsidianVault({
+    required String id,
+    required String name,
+    required String path,
+  }) async {
+    await _request(
+      'POST',
+      '/api/obsidian/vaults',
+      body: {
+        'vault_id': id,
+        'name': name,
+        'path': path,
+        'default_access': 'excluded',
+      },
+    );
+  }
+
+  Future<void> removeObsidianVault(String id) async {
+    await _request('DELETE', '/api/obsidian/vaults/$id');
+  }
+
+  Future<void> reindexObsidian() async {
+    await _request('POST', '/api/obsidian/reindex');
+  }
+
+  Future<void> openObsidianNote(String vaultId, String relativePath) async {
+    await _request(
+      'POST',
+      '/api/obsidian/open',
+      body: {'vault_id': vaultId, 'relative_path': relativePath},
     );
   }
 
@@ -284,11 +328,9 @@ class JarvisHealth {
   const JarvisHealth({
     required this.status,
     required this.brain,
-    required this.routingMode,
   });
   final String status;
   final String brain;
-  final String routingMode;
 }
 
 class JarvisChatReply {
@@ -296,10 +338,54 @@ class JarvisChatReply {
     required this.reply,
     String? speech,
     required this.toolResults,
+    this.citations = const [],
   }) : speech = speech ?? reply;
   final String reply;
   final String speech;
   final List<Map<String, dynamic>> toolResults;
+  final List<ObsidianCitation> citations;
+}
+
+class ObsidianCitation {
+  const ObsidianCitation({
+    required this.title,
+    required this.sourcePath,
+    required this.section,
+    required this.uri,
+    required this.vaultId,
+  });
+  factory ObsidianCitation.fromJson(Map<String, dynamic> json) =>
+      ObsidianCitation(
+        title: json['title'] as String? ?? 'Obsidian note',
+        sourcePath: json['source_path'] as String? ?? '',
+        section: json['section'] as String? ?? '',
+        uri: json['obsidian_uri'] as String? ?? '',
+        vaultId: json['vault_id'] as String? ?? '',
+      );
+  final String title;
+  final String sourcePath;
+  final String section;
+  final String uri;
+  final String vaultId;
+}
+
+class ObsidianVault {
+  const ObsidianVault({
+    required this.id,
+    required this.name,
+    required this.indexedChunks,
+    required this.defaultAccess,
+  });
+  factory ObsidianVault.fromJson(Map<String, dynamic> json) => ObsidianVault(
+    id: json['id'] as String? ?? '',
+    name: json['name'] as String? ?? 'Vault',
+    indexedChunks: (json['indexed_chunks'] as num?)?.toInt() ?? 0,
+    defaultAccess: json['default_access'] as String? ?? 'excluded',
+  );
+  final String id;
+  final String name;
+  final int indexedChunks;
+  final String defaultAccess;
 }
 
 class JarvisHistoryTurn {

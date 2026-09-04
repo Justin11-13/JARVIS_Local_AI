@@ -75,6 +75,19 @@ class VectorStore:
             if "section_part" in chunk:
                 metadata["section_part"] = chunk["section_part"]
 
+            for key in (
+                "source_path", "source_type", "knowledge_domain", "vault_id",
+                "vault_name", "title", "access", "status", "authority",
+                "source_url", "updated_at",
+            ):
+                value = chunk.get(key)
+                if value not in (None, ""):
+                    metadata[key] = value
+            for key in ("aliases", "tags"):
+                values = chunk.get(key)
+                if values:
+                    metadata[key] = " | ".join(str(value) for value in values)
+
             metadatas.append(metadata)
 
         self.collection.upsert(

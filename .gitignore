@@ -43,11 +43,13 @@ config/apps.json
 config/projects.json
 config/project_roots.json
 config/game_mode.json
+config/obsidian_vaults.json
 
 # Keep public example configs
 !config/apps.example.json
 !config/projects.example.json
 !config/project_roots.example.json
+!config/obsidian_vaults.example.json
 
 # =========================
 # Local databases / memory
@@ -111,3 +113,6 @@ PROJECT_SCOPE.md
 data/rag/chroma/
 data/rag/index_manifest.json
 data/memory/
+
+# Personal standalone UI prototype
+Jarvis_UI.html
