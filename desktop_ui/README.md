@@ -33,6 +33,13 @@ After changing Flutter code, close the Release app and rerun
 `.\run-desktop.ps1 -BuildOnly -Release`. The desktop shortcut then uses the updated
 build; it does not need to be recreated unless the repository moves.
 
+Building Flutter plugins on Windows requires Developer Mode and Visual Studio's
+**Desktop development with C++** workload. Enable Developer Mode under **Settings
+→ System → For developers**. These are Windows/toolchain prerequisites and are
+not Python packages, so they are documented rather than placed in
+`requirements.txt`. Developer Mode can be disabled again when only running the
+already-built shortcut.
+
 ## Run
 
 From the repository root in PowerShell:
@@ -103,8 +110,9 @@ this is not a collector for historical Python logs or native process crashes.
 
 Chat and tool evidence still use `/api/chat`, including the existing text-based
 confirmation flow. Keyboard submission sends once; suggestions fill the composer without
-executing anything. Tasks lists this UI session only, not the entire Core history.
-The UI does not fake token streaming, a live stop button or model liveness.
+executing anything. Assistant starts empty after every restart; prior locally saved
+turns appear as expandable archives under Tasks. The UI does not fake token
+streaming, a live stop button or model liveness.
 
 Use **Read reply** beside a completed Assistant response with the session voice
 provider selected in Settings. **Windows system voice** follows the voice and

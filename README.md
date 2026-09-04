@@ -17,8 +17,9 @@ Codex delegation are not implemented yet.
 
 **Status:** working desktop/API/telemetry foundation, under active development.
 Gemini-backed free-form chat and the current safe local-tool set work when the
-user supplies a local key. Voice, wake word, a desktop companion, persistent
-history, and Codex delegation are not implemented.
+user supplies a local key. Windows and optional Fish Audio reply speech, local
+conversation archives, and background RAG warm-up are implemented. Wake word,
+voice input, a desktop companion, and Codex delegation are not implemented.
 
 [Screenshots](#desktop-preview) · [Installation](#installation) ·
 [Features](#current-features) · [Security](#security-model) ·
@@ -54,7 +55,7 @@ response times are examples from that session, not performance benchmarks.
 | Page | Available now |
 | --- | --- |
 | Assistant | Gemini-backed chat when BYOK is configured, native tool results, one-step high-risk confirmation, and a system-monitor side panel on wider windows. |
-| Tasks | Requests and results from the current UI session. |
+| Tasks | Requests from the current UI session and locally archived conversations from earlier sessions. |
 | Device | Live CPU, memory, NVIDIA GPU, and local runtime status. |
 | Settings | Session-only appearance and brain/routing information is read-only. |
 | Errors | Session-only diagnostics, occurrence counts, error details, copy, and confirmed clear. |
@@ -66,10 +67,11 @@ response times are examples from that session, not performance benchmarks.
 - UI errors use a compact notice and a dedicated Errors page instead of a large
   red Flutter error panel. Command-line and IDE diagnostics are preserved.
 
-The desktop app uses the same Core tools and routing policy as the CLI.
-Conversation history, the UI task list, error reports, and UI preferences are
-not yet persisted across app sessions. See the [desktop guide](desktop_ui/README.md)
-for detailed behavior and limits.
+The desktop app uses the same Core tools and routing policy as the CLI. Assistant
+starts as a clean conversation after every restart; up to 100 earlier turns are
+stored locally and shown under Tasks, while only the latest six turns are sent as
+reasoning context. Error reports and UI preferences remain session-only. See the
+[desktop guide](desktop_ui/README.md) for detailed behavior and limits.
 
 ### What Works Now / 现在能做什么
 
@@ -87,8 +89,8 @@ for detailed behavior and limits.
   Menu shortcut and opens it.
 - **Gemini BYOK chat / 自备 Gemini Key:** users can configure one local Gemini
   API key in `.env`. Gemini can answer general questions in Chinese or English,
-  keep a small in-session memory, and request only declared JARVIS tools. It
-  never receives a shell, unrestricted Windows access, or the API key itself.
+  keep a small bounded conversation context, and request only declared JARVIS
+  tools. It never receives a shell, unrestricted Windows access, or the API key itself.
   See [Gemini BYOK setup](#gemini-byok-setup) before enabling it.
 - **Open Interpreter safety foundation / 安全基础:** workspace validation,
   manual/ask/automatic modes, risk classification, confirmation, task records,
@@ -451,6 +453,8 @@ For the Windows desktop source build:
 - Flutter SDK; the current build uses Flutter 3.44.9 / Dart 3.12.2
 - Visual Studio with the **Desktop development with C++** workload, not just
   Visual Studio Code; see [Flutter's Windows setup guide](https://docs.flutter.dev/platform-integration/windows/setup)
+- Windows **Developer Mode** enabled while resolving/building Flutter plugins:
+  **Settings → System → For developers → Developer Mode**
 
 The launch script currently expects Flutter at
 `C:\Flutter-3.44.9\flutter\bin\flutter.bat`. If your SDK lives elsewhere, update
@@ -459,6 +463,20 @@ The Dart SDK constraint is declared in [desktop_ui/pubspec.yaml](desktop_ui/pubs
 
 NVIDIA hardware and a working driver are needed for NVIDIA-specific telemetry,
 not for displaying the desktop shell. Available GPU metrics depend on the device.
+
+Developer Mode is a build-time requirement for Flutter's plugin symlinks. It is
+not required merely to run an already-built JARVIS Release from the desktop
+shortcut. If Flutter reports that NuGet is missing, install it separately with:
+
+```powershell
+winget install Microsoft.NuGet
+```
+
+Windows voices are operating-system components and cannot be installed through
+`requirements.txt`. Add them under **Settings → Time & language → Speech →
+Voices**. JARVIS reads the currently selected Windows voice and speed. Fish Audio
+also cannot be installed by pip: it requires a Fish Audio account, API key,
+available credits, and optionally an authorized reference voice ID.
 
 ---
 
@@ -469,7 +487,7 @@ not for displaying the desktop shell. Available GPU metrics depend on the device
 Run these commands in PowerShell. All later commands start from the repository root.
 
 ```powershell
-git clone https://github.com/Justin11-13/JARVIS_Local_AI.git
+git clone https://github.com/Ongzhenggan/JARVIS_Local_AI.git
 cd JARVIS_Local_AI
 ```
 
@@ -481,6 +499,8 @@ python -m venv .venv
 ```
 
 The commands use the virtual environment directly; activation is optional.
+This installs the API, telemetry, local RAG model/runtime, and development
+auto-reload dependencies. The first RAG setup may download the embedding model.
 
 ### 3. Configure Gemini BYOK (optional, enables free-form chat)
 
@@ -527,7 +547,22 @@ Read Google's current [API key guide](https://ai.google.dev/gemini-api/docs/api-
 and [Gemini API Additional Terms](https://ai.google.dev/gemini-api/terms)
 before distributing an app that uses the API.
 
-### 4. Configure project scan roots (optional)
+### 4. Configure reply voice (optional)
+
+Windows system voice works without an API key. Select the Windows voice and
+speed in Windows Speech settings, then select **Windows system voice** in JARVIS.
+
+For Fish Audio, add the following only to your local `.env`:
+
+```dotenv
+FISH_API_KEY=PASTE_YOUR_OWN_KEY_HERE
+FISH_REFERENCE_ID=OPTIONAL_AUTHORIZED_VOICE_MODEL_ID
+```
+
+Select **Fish Audio cloud** in JARVIS Settings. Only reply narration is sent to
+Fish Audio. A valid key without available credits will still produce no audio.
+
+### 5. Configure project scan roots (optional)
 
 For project tools, create a local configuration without replacing an existing one:
 
@@ -567,7 +602,7 @@ if (-not (Test-Path config\projects.json)) {
 
 Local project configuration should not be committed.
 
-### 5. Build the desktop app and create its shortcut
+### 6. Build the desktop app and create its shortcut
 
 Complete the [Flutter Windows toolchain setup](https://docs.flutter.dev/platform-integration/windows/setup),
 then check it and build:
@@ -630,11 +665,7 @@ The shortcut does not add Windows login startup or a keyboard hotkey. More detai
 The **terminal CLI** supports automatic restart during development. This does
 not hot-reload the separate desktop API process.
 
-### Install `watchfiles`
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install watchfiles
-```
+`watchfiles` is installed by `requirements.txt`; no separate command is needed.
 
 ### Start development mode
 

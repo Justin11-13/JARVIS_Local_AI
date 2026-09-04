@@ -1,6 +1,16 @@
-psutil
-nvidia-ml-py==13.610.43
+# Core API and configuration
+fastapi
 pydantic
 python-dotenv
-fastapi
 uvicorn[standard]
+
+# Local system telemetry
+psutil
+nvidia-ml-py==13.610.43
+
+# Local RAG knowledge retrieval
+chromadb==1.5.9
+sentence-transformers==6.0.1
+
+# Development auto-reload used by dev.ps1
+watchfiles==1.2.0
