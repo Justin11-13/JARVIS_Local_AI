@@ -20,7 +20,7 @@ from services.rag.vector_store import (
 from services.rag.keyword_store import KeywordStore
 
 
-INDEX_VERSION = 6
+INDEX_VERSION = 7
 CHUNKING_STRATEGY = "markdown-hierarchy-v1"
 EMBEDDING_STRATEGY = "source-metadata-hierarchy-content-v1"
 
@@ -188,9 +188,6 @@ def rebuild_index(
         "[RAG] Rebuilding knowledge index..."
     )
 
-    vector_store.reset()
-    keyword_store.clear()
-
     chunks = chunk_documents(
         documents
     )
@@ -211,10 +208,15 @@ def rebuild_index(
             )
         )
 
+        vector_store.reset()
+        keyword_store.clear()
         vector_store.add_chunks(
             embedded_chunks
         )
         keyword_store.upsert_chunks(chunks)
+    else:
+        vector_store.reset()
+        keyword_store.clear()
 
     save_manifest(
         current_hashes

@@ -111,6 +111,8 @@ def route_knowledge(query: str) -> KnowledgeRoute:
         return KnowledgeRoute(False)
     obsidian = any(term in normalized for term in OBSIDIAN_TERMS)
     jarvis = _is_jarvis_query(normalized)
+    # A Vault query includes its JARVIS subtree as well as other knowledge.
+    jarvis = jarvis or obsidian
     domains = tuple(domain for domain, selected in (("jarvis", jarvis), ("obsidian", obsidian)) if selected)
     return KnowledgeRoute(bool(domains), domains)
 

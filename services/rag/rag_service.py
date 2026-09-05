@@ -31,10 +31,12 @@ class RAGService:
         self,
         top_k: int = DEFAULT_TOP_K,
         min_similarity: float = DEFAULT_MIN_SIMILARITY,
+        memory_store=None,
     ):
         self.retriever = Retriever()
         self.top_k = top_k
         self.min_similarity = min_similarity
+        self.memory_store = memory_store
 
     def retrieve_context(
         self,
@@ -61,9 +63,12 @@ class RAGService:
             domains=domains,
         )
 
-        relevant_results = [
-            result for result in results if result["similarity"] >= self.min_similarity
-        ]
+        blocked = set()
+        if getattr(self, 'memory_store', None):
+            blocked = {(item['obsidian']['vault_id'], item['obsidian']['relative_path'])
+                       for item in self.memory_store.items() if item.get('obsidian') and item['status'] != 'confirmed'}
+        relevant_results = [result for result in results if result["similarity"] >= self.min_similarity
+                            and (result.get('vault_id'), result.get('source_path')) not in blocked]
 
         if not relevant_results:
             return {

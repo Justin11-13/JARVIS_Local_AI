@@ -15,7 +15,7 @@ class NotificationService:
         elif status == "failed":
             message = "任务执行失败。"
 
-        elif status == "timeout":
+        elif status in {"timeout", "timed_out"}:
             message = "任务执行超时。"
 
         elif status == "cancelled":
@@ -23,6 +23,9 @@ class NotificationService:
 
         elif status == "validation_failed":
             message = "任务无法开始，请检查任务参数。"
+
+        elif status == "verification_failed":
+            message = "任务已执行，但结果验证失败。"
 
         else:
             message = f"任务状态已更新：{status}"

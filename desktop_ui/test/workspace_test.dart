@@ -18,11 +18,7 @@ class FakeApi extends JarvisApi {
   @override
   Future<JarvisHealth> health() async {
     if (offline) throw const JarvisApiException('Core is offline.');
-    return const JarvisHealth(
-      status: 'ready',
-      brain: 'codex',
-      routingMode: 'manual',
-    );
+    return const JarvisHealth(status: 'ready', brain: 'codex');
   }
 
   @override
@@ -70,6 +66,9 @@ class FakeApi extends JarvisApi {
 
   @override
   Future<List<ObsidianVault>> obsidianVaults() async => const [];
+
+  @override
+  Future<List<BackgroundTask>> backgroundTasks() async => const [];
 }
 
 void main() {

@@ -224,6 +224,15 @@ class GeminiAdapter:
             },
         },
         {
+            "name": "read_obsidian_note",
+            "description": "Read shared note text using the vault ID and path returned by search. Reports truncation; refuses local-only/excluded notes.",
+            "parameters": {
+                "type": "object",
+                "properties": {"vault_id": {"type": "string"}, "relative_path": {"type": "string"}},
+                "required": ["vault_id", "relative_path"],
+            },
+        },
+        {
             "name": "open_obsidian_note",
             "description": "Open an existing note in its configured Obsidian vault.",
             "parameters": {
@@ -400,13 +409,43 @@ class GeminiAdapter:
             with urlopen(request, timeout=self.timeout) as response:
                 return json.loads(response.read().decode("utf-8")), None
         except HTTPError as error:
-            return None, self._error("failed", f"Gemini rejected the request (HTTP {error.code}).")
+            detail = ''
+            try:
+                from services.jarvis_memory import JarvisMemory
+                detail = JarvisMemory._safe_text(json.loads(error.read()).get('error', {}).get('message', ''))[:1000]
+                detail = detail.replace(self.api_key, '[redacted]') if self.api_key else detail
+            except (ValueError, OSError, UnicodeDecodeError):
+                pass
+            return None, self._error("failed", f"Gemini rejected the request (HTTP {error.code}). {detail}".strip())
         except URLError:
             return None, self._error("unavailable", "Gemini could not be reached. Check the network connection.")
         except TimeoutError:
             return None, self._error("timeout", f"Gemini did not respond within {self.timeout} seconds.")
         except (OSError, UnicodeDecodeError, json.JSONDecodeError):
             return None, self._error("failed", "Gemini returned an unreadable response.")
+
+    def generate_json(self, instruction: str, data: dict, schema: dict) -> dict:
+        if not self.is_configured():
+            raise ValueError('Gemini is not configured')
+        # Gemini's constrained decoder accepts a smaller schema than Pydantic.
+        # Keep the wire schema shallow; the full constraints are enforced locally.
+        def wire(node):
+            if '$ref' in node:
+                return wire(schema['$defs'][node['$ref'].split('/')[-1]])
+            result = {key: node[key] for key in ('type', 'enum', 'required', 'minimum', 'maximum') if key in node}
+            if 'properties' in node:
+                result['properties'] = {key: wire(value) for key, value in node['properties'].items()}
+            if 'items' in node:
+                result['items'] = wire(node['items'])
+            return result
+        body, error = self._send({
+            'system_instruction': {'parts': [{'text': instruction}]},
+            'contents': [{'role': 'user', 'parts': [{'text': json.dumps(data, ensure_ascii=False)}]}],
+            'generationConfig': {'responseMimeType': 'application/json', 'responseSchema': wire(schema)},
+        })
+        if error:
+            raise ValueError(error['error'])
+        return json.loads(self._extract_text(body))
 
     def _success(self, text: str, tool_calls: list[str] | None = None) -> dict:
         return {

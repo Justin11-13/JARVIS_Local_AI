@@ -78,7 +78,7 @@ class VectorStore:
             for key in (
                 "source_path", "source_type", "knowledge_domain", "vault_id",
                 "vault_name", "title", "access", "status", "authority",
-                "source_url", "updated_at",
+                "source_url", "updated_at", "created_at", "type", "category", "project", "component", "superseded_by",
             ):
                 value = chunk.get(key)
                 if value not in (None, ""):

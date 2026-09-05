@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 import re
 from threading import Lock
+from services.obsidian_conversation import ObsidianConversation
 
 
 _SENSITIVE_ASSIGNMENT = re.compile(
@@ -34,6 +35,7 @@ class JarvisMemory:
         max_turns: int = 6,
         storage_path: Path | None = None,
         context_turns: int | None = None,
+        database_path: Path | None = None,
     ):
         if max_turns < 1:
             raise ValueError("max_turns must be at least 1")
@@ -44,7 +46,22 @@ class JarvisMemory:
         self._storage_path = storage_path
         self._context_turns = min(context_turns or max_turns, max_turns)
         self._lock = Lock()
+        # Paths only, for this runtime session; no private note bodies on disk.
+        self.notes = ObsidianConversation()
+        self.store = None
+        self.conversation_id = None
         self._load()
+        if database_path is not None:
+            from services.memory_store import MemoryStore
+            self.store = MemoryStore(database_path)
+            self.conversation_id = self.store.conversation()
+            if not self.store.state('legacy_imported', False):
+                for turn in self._turns:
+                    self.store.add_turn(self.conversation_id, **asdict(turn))
+                self.store.set_state('legacy_imported', True)
+            self._turns.clear()
+            for turn in self.store.turns(self.conversation_id, max_turns):
+                self._turns.append(MemoryTurn(**{key: turn[key] for key in ('user', 'assistant', 'speech', 'created_at')}))
 
     @staticmethod
     def _safe_text(value: str) -> str:
@@ -78,6 +95,8 @@ class JarvisMemory:
             print(f"[Memory] Could not load conversation history: {error}")
 
     def _save(self) -> None:
+        if self.store is not None:
+            return
         if self._storage_path is None:
             return
 
@@ -101,6 +120,8 @@ class JarvisMemory:
             return
 
         with self._lock:
+            if self.store is not None:
+                self.store.add_turn(self.conversation_id, user, assistant, speech)
             self._turns.append(
                 MemoryTurn(
                     user=user,
@@ -137,6 +158,10 @@ class JarvisMemory:
     def clear(self) -> None:
         with self._lock:
             self._turns.clear()
+            self.notes.clear()
+            if self.store is not None:
+                self.store.end(self.conversation_id)
+                self.conversation_id = self.store.conversation()
             try:
                 self._save()
             except OSError as error:
@@ -145,3 +170,28 @@ class JarvisMemory:
     def __len__(self) -> int:
         with self._lock:
             return len(self._turns)
+
+    def set_project(self, project: str):
+        if self.store is None:
+            return
+        with self._lock:
+            self.store.end(self.conversation_id)
+            self.conversation_id = self.store.conversation(project)
+            self._turns.clear()
+            self.notes.clear()
+
+    def resume(self, identifier):
+        if self.store is None or not self.store.conversation_info(identifier):
+            raise ValueError('Conversation not found')
+        if identifier.startswith('coding:'):
+            raise ValueError('Use Continue selected task to resume Codex work')
+        with self._lock:
+            self.store.end(self.conversation_id)
+            with self.store.connect() as db:
+                db.execute('UPDATE conversations SET ended_at=NULL WHERE id=?', (identifier,))
+            self.store.set_state('active_conversation', identifier)
+            self.conversation_id = identifier
+            self._turns.clear()
+            for turn in self.store.turns(identifier, self._turns.maxlen):
+                self._turns.append(MemoryTurn(**{key: turn[key] for key in ('user', 'assistant', 'speech', 'created_at')}))
+            self.notes.clear()

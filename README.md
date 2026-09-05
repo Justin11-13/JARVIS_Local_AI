@@ -12,14 +12,60 @@ recompiling the app.
 JARVIS does not load a local language model and does not use a GPT API. When a
 user enables Gemini BYOK, Gemini understands the user's text and can propose a
 small, declared set of local tools. Python policy—not an AI prompt alone—still
-validates each tool call and controls confirmation. ChatGPT UI delegation and
-Codex delegation are not implemented yet.
+validates each tool call and controls confirmation. Codex App Server now handles
+registered-project coding tasks; ChatGPT UI delegation remains unimplemented.
 
 **Status:** working desktop/API/telemetry foundation, under active development.
 Gemini-backed free-form chat and the current safe local-tool set work when the
 user supplies a local key. Windows and optional Fish Audio reply speech, local
 conversation archives, and background RAG warm-up are implemented. Wake word,
-voice input, a desktop companion, and Codex delegation are not implemented.
+voice input, and a desktop companion are not implemented.
+
+### Memory and Codex / 记忆与编程代理（2026-09-05）
+
+Open **Tasks → Coding & memory**. Select a registered project, enter a coding
+request, and choose **Start Codex**. Select a task to inspect persisted SSE events,
+answer approval/input requests, cancel, or continue its Codex thread. Codex CLI
+must be installed and authenticated (`codex login`); optionally set
+`JARVIS_CODEX_PATH` to its native executable. The backend uses App Server stdio,
+not a one-shot `codex exec` command. Unavailable authentication and execution
+errors remain visible. High-risk actions stay blocked while authorized voice
+verification is unavailable; ordinary request-bound approvals remain available.
+
+在 **Tasks → Coding & memory** 选择项目并启动编程任务；事件由 SSE 推送，
+批准、补充输入和取消通过 REST 提交。可以继续原 Codex thread。普通批准支持
+Allow once、限定项目与精确诊断命令的 Always Allow，以及 Deny。
+
+Original conversations, summaries, memory candidates, tasks and event history
+persist in `data/memory/jarvis.sqlite3`. Existing JSON history is preserved.
+Gemini extracts evidence-backed candidates on memory events, eight conversation
+turns (about sixteen messages), long context, or explicit conversation end.
+Only candidates passing importance/confidence and exact-quote checks are retained;
+they still require **Confirm for AI memory** before entering future AI context.
+**Resume conversation** restores saved context, and **Use project in chat** scopes
+subsequent discussion to that project. The Assistant visual transcript stays fresh.
+
+原始聊天保存在 SQLite，不整段写入 Obsidian。记忆先成为待审核候选；确认后才能
+用于后续回答。**Preview Obsidian merge** 搜索已有笔记、展示合并预览，经发布后
+只更新自己的记忆区块，保留手写内容并备份原文件。过期预览和文件冲突会拒绝写入。
+共享笔记沿用 `jarvis_access: rag`；私人或排除笔记不会被该流程自动发布。
+拒绝记忆会停止个人记忆上下文使用，并阻止对应已发布笔记参与 RAG；不会删除手写笔记。
+
+Context Builder bounds recent turns, conversation summary, confirmed relevant
+personal/project memory and existing Top-K RAG results. Model confidence never
+automatically turns a proposal into an approved decision. Coding completion
+archives reported changes and tool/test event evidence into the same candidate
+pipeline. Test counts are never inferred from a model's claim.
+
+Canonical architecture and knowledge now live in the configured Obsidian Vault:
+`JARVIS/Knowledge/Architecture/Current/Data Architecture.md` and
+`JARVIS/Knowledge/Architecture/Target/Memory and Codex Delivery Design.md`.
+The repository `knowledge` directory is no longer an RAG source. SQLite raw
+conversations, pending candidates and runtime indexes remain local operational
+storage; they are not copied into the Git-synced Vault. Approved memories publish
+to the Vault's Decisions / Preferences / Projects / Facts folders. Published
+memory is reread from Obsidian before use, so missing or private notes do not
+silently fall back to stale SQLite text.
 
 [Screenshots](#desktop-preview) · [Installation](#installation) ·
 [Features](#current-features) · [Security](#security-model) ·
@@ -102,8 +148,8 @@ reasoning context. Error reports and UI preferences remain session-only. See the
 
 ### Not Available Yet / 现在还不能做
 
-- Codex and ChatGPT UI delegation are not configured. A coding request is not
-  silently handed to another provider; JARVIS reports its current limit.
+- ChatGPT UI delegation and authorized speaker verification are not implemented.
+  Codex requires an installed, authenticated CLI and a registered project.
 - No Ollama, Qwen, other local model, GPT API, automatic browser control,
   unrestricted PowerShell, file-writing chat workflow, or unrestricted
   autonomous computer control is available.
@@ -332,7 +378,7 @@ Core tool flow:
                          User
                           │
                           ▼
-              Codex executor (planned)
+              Codex App Server (registered projects)
                           │
                           ▼
                   Action proposal
@@ -626,8 +672,8 @@ For the terminal-only assistant:
   desktop window does not reload a running backend.
 - **Shortcut cannot start:** check the error dialog and `tmp/desktop-startup.log`.
   For build diagnostics, run `.\run-desktop.ps1 -BuildOnly` in PowerShell.
-- **API connected, reasoning unavailable:** configure the Codex executor when
-  that migration phase is complete.
+- **API connected, reasoning unavailable:** check Gemini BYOK settings for chat;
+  for coding, verify the installed Codex CLI is authenticated.
 
 When the shortcut starts the API, closing that desktop window stops the API too.
 An API that was already running is reused and is not stopped by this shortcut.
@@ -833,12 +879,12 @@ config/project_roots.example.json
 
 JARVIS is an experimental Windows desktop assistant with a working Flutter UI,
 loopback API, guarded native Windows tools, live telemetry, and Gemini BYOK
-chat. Its former local-model loop has been removed. The ChatGPT UI and Codex
-executors remain planned integrations.
+chat, SQLite memory and Codex App Server integration. Its former local-model loop
+has been removed. ChatGPT UI delegation remains planned.
 
 The current product foundation includes the desktop shortcut, Assistant / Tasks /
 Device / Settings / Errors pages, and session-only diagnostics. Voice input,
-wake word, a desktop companion, persistent history, system tray integration,
+wake word, a desktop companion, system tray integration,
 and editable model/routing configuration are still planned.
 
 It is not yet intended to provide unrestricted autonomous control of a computer.
@@ -905,7 +951,7 @@ live telemetry, session diagnostics, and a desktop shortcut. The local-model
 conversation loop has been removed.
 
 **Planned:** the permission boundary for every executor, authenticated ChatGPT
-UI hand-off/result collection, Codex hand-off for coding tasks, voice,
+UI hand-off/result collection, authorized voice verification,
 advanced/persistent settings, system tray and lifecycle controls, browser
 control, and hardware-control integrations. NVIDIA telemetry is available;
 hardware control is not.
@@ -919,7 +965,7 @@ system access; Python policy decides what is actually allowed.
 | --- | --- | --- |
 | Native Python / PowerShell tools | Small supported actions such as opening apps, reading system information, project inspection, Git status, and read-only file access. | Implemented foundation; permission coverage is being expanded. |
 | ChatGPT UI executor | Broader questions, web-assisted research, and visible-result collection through the authenticated ChatGPT interface. | Planned; no GPT API. |
-| Codex executor | Repository-scale coding, debugging, implementation, tests, and action proposals. | Planned; no unconfigured request is executed. |
+| Codex executor | Registered-project coding through App Server, streamed events and guarded approvals. | Implemented; installed/authenticated CLI required; high-risk Trust Gate unavailable. |
 
 Intended model routing:
 
@@ -1037,21 +1083,23 @@ is submitted to ChatGPT or another external service.
 A task should be tracked rather than simply launched and forgotten.
 
 ~~~text
-QUEUED → RUNNING → OBSERVING → COMPLETED
-                    ↓
-                  FAILED
+QUEUED → RUNNING → VERIFYING → COMPLETED
+            │           └────→ VERIFICATION_FAILED
+            ├──→ CANCELLING → CANCELLED
+            ├──→ TIMED_OUT
+            └──→ FAILED
 ~~~
 
-Complex agents may retry a bounded, safe recovery loop before reporting a
-failure.
+**Implemented:** a two-worker local queue runs declared background jobs without
+blocking Assistant. Tasks persist to `data/tasks.json`, report progress, stop at
+cooperative cancellation checkpoints, enforce a time limit, verify their result,
+and can be retried as a linked new attempt. The Tasks page exposes Project Scan
+and Knowledge Reindex jobs with Cancel and Retry controls.
 
-**Implemented foundation:** managed tasks track creation, start, completion,
-duration, result, and error; terminal notifications report completion or
-failure. The desktop Tasks page lists requests and results from the current UI
-session; it is not a durable or complete backend task archive.
-
-**Planned:** observation/retry policy, persistent task history, Windows notifications,
-desktop UI notifications, and voice notifications.
+Only declared job types are accepted; this is not an arbitrary shell executor.
+Cancellation is cooperative, so a currently executing non-interruptible library
+call stops at its next checkpoint. Windows toast and voice notifications remain
+planned.
 
 ### Local API
 
@@ -1076,12 +1124,14 @@ Current endpoints include:
   does not contact a reasoning backend.
 - `GET /api/telemetry` — read-only CPU, memory, and NVIDIA GPU counters.
 - `POST /api/chat` — conversation and tool execution through Core/TaskRouter.
+- `GET/POST /api/background-tasks` — list or create declared background jobs.
+- `POST /api/background-tasks/{id}/cancel` and `/retry` — control an existing job.
 - `GET /api/projects` and the `/api/projects/...` actions — registered-project
   metadata, Git status, read-only file tools, and explicit registry refresh.
 
-The API retains Python routing checks for tool execution. Persistent task,
-editable settings, model-management, and broader application-control APIs are
-still planned. Loopback binding is not a substitute for a full permission model.
+The API retains Python routing checks for tool execution. Editable settings,
+model-management, and broader application-control APIs are still planned.
+Loopback binding is not a substitute for a full permission model.
 
 ### Delivery Phases
 
@@ -1099,7 +1149,7 @@ still planned. Loopback binding is not a substitute for a full permission model.
   low-risk operations.
 - [x] Add Gemini BYOK understanding with Python-validated native tool calls.
 - [ ] Add a confirmation-gated ChatGPT UI executor without a GPT API.
-- [ ] Add a confirmation-gated Codex executor for heavy coding tasks.
+- [x] Add a request-bound Codex App Server adapter, task events and approval UI; high-risk voice verification remains unavailable.
 
 Detailed acceptance criteria and later phases are maintained in the
 [implementation plan](docs/chatgpt-codex-implementation-plan.md).
@@ -1116,6 +1166,7 @@ Detailed acceptance criteria and later phases are maintained in the
 - [x] Loopback FastAPI API reusing Core tools and routing policy.
 - [x] Flutter Windows shell with Assistant, Tasks, Device, Settings, and Errors.
 - [x] Live CPU/RAM/NVIDIA GPU monitoring and a status dashboard.
+- [x] Persistent, cancellable, retryable, and verified local background jobs.
 - [x] Session-only appearance/monitor preferences and error diagnostics.
 - [x] Release build and one-click desktop shortcut.
 - [ ] Persistent and editable brain, routing, project, and agent settings.
@@ -1129,7 +1180,7 @@ Detailed acceptance criteria and later phases are maintained in the
 
 #### Phase 5 — Expansion
 
-- [ ] Local SQLite task history, project context, and user preferences.
+- [ ] Local SQLite conversation history, project context, and user preferences.
 - [ ] Browser and dedicated application integrations.
 - [ ] Supported hardware integrations.
 - [ ] Evaluate web, mobile, macOS, Linux, and multi-device support after the

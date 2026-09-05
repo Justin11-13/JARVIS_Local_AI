@@ -49,18 +49,13 @@ def load_obsidian_vaults(config_path: Path = DEFAULT_CONFIG_PATH) -> list[dict]:
 
 
 def knowledge_sources() -> list[dict]:
+    # Obsidian is canonical. Repo documentation is no longer a parallel source.
     sources = [{
-        "id": "internal:jarvis",
-        "source_type": "internal",
-        "knowledge_domain": "jarvis",
-        "path": ROOT_DIR / "knowledge" / "jarvis",
-    }]
-    sources.extend({
         "id": f"obsidian:{vault['id']}",
         "source_type": "obsidian",
         "knowledge_domain": "obsidian",
         **vault,
-    } for vault in load_obsidian_vaults())
+    } for vault in load_obsidian_vaults()]
     return sources
 
 

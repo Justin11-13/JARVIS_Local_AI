@@ -36,7 +36,7 @@ class PermissionManager:
         "get_system_info", "list_projects", "get_project_info", "git_status", "list_files",
         "read_file", "search_files", "get_battery_status", "get_network_status",
         "list_running_processes",
-        "search_obsidian_notes",
+        "search_obsidian_notes", "read_obsidian_note",
     }
     EXPLICIT_LOCAL_ACTIONS = {
         "open_app", "open_project", "refresh_project_registry", "adjust_volume", "toggle_mute",
@@ -53,6 +53,14 @@ class PermissionManager:
         "delete_file", "admin_command", "shutdown_computer", "restart_computer", "sleep_computer",
     }
     EXTERNAL_EXECUTORS = {"chatgpt_ui", "codex", "gemini"}
+
+    def authorize_codex(self, decision: str, high_risk: bool) -> str:
+        """Validate a request-bound UI decision; never infer voice identity."""
+        if decision not in {'allow_once', 'always_allow', 'deny'}:
+            raise ValueError('Unknown approval decision')
+        if decision != 'deny' and high_risk:
+            raise ValueError('High-risk Trust Gate is unavailable: authorized voice verification is not configured. Approval remains blocked.')
+        return 'decline' if decision == 'deny' else 'accept'
 
     def evaluate(self, request: ActionRequest) -> PermissionDecision:
         if request.executor == "gemini" and request.action == "generate_response":

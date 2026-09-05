@@ -8,6 +8,15 @@ from services.task_manager import TaskManager
 class TaskRouter:
     """Enforce tool-routing policy before a JARVIS tool is executed."""
 
+    @staticmethod
+    def is_coding_request(text):
+        import re
+        if re.match(r'\s*(如何|怎么|怎样|解释|what|how|explain)', text, re.I):
+            return False
+        return bool(re.match(r'\s*/codex\s+', text, re.I) or (
+            re.search(r'修复|修改|实现|重构|debug|refactor|implement|fix', text, re.I)
+            and re.search(r'代码|项目|仓库|repo|project|bug|tests?|\.py\b|\.dart\b', text, re.I)))
+
     def __init__(
         self,
         task_manager: TaskManager,
@@ -158,7 +167,7 @@ class TaskRouter:
         try:
             return function_to_call(**arguments)
         except Exception as error:
-            return f"Tool execution failed: {error}"
+            return {"success": False, "status": "failed", "result": "", "error": f"Tool execution failed: {error}"}
 
     def execute_tool(
         self,
@@ -176,7 +185,7 @@ class TaskRouter:
 
         function_to_call = available_tools.get(function_name)
         if not function_to_call:
-            return f"Tool '{function_name}' is not available."
+            return {"success": False, "status": "failed", "result": "", "error": f"Tool '{function_name}' is not available."}
 
         decision = self.permission_manager.evaluate(
             ActionRequest(

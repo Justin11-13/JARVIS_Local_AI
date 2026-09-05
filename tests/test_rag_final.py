@@ -29,7 +29,7 @@ class RagFinalIntegrationTests(unittest.TestCase):
 
     def test_index_config_is_versioned_for_final_strategies(self):
         config = current_index_config()
-        self.assertEqual(config["index_version"], 6)
+        self.assertEqual(config["index_version"], 7)
         self.assertEqual(config["chunking_strategy"], "markdown-hierarchy-v1")
         self.assertEqual(config["embedding_strategy"], "source-metadata-hierarchy-content-v1")
 
@@ -40,7 +40,7 @@ class RagFinalIntegrationTests(unittest.TestCase):
         self.assertFalse(should_use_rag("Gemini 是什么？"))
 
         from services.rag.knowledge_router import route_knowledge
-        self.assertEqual(route_knowledge("我的 Obsidian 笔记说了什么？").domains, ("obsidian",))
+        self.assertEqual(route_knowledge("我的 Obsidian 笔记说了什么？").domains, ("jarvis", "obsidian"))
         self.assertEqual(route_knowledge("根据我的笔记比较 JARVIS 权限").domains, ("jarvis", "obsidian"))
 
     def test_permission_expansion_and_current_future_reranking(self):

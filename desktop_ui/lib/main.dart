@@ -276,6 +276,8 @@ class _DesktopWorkspaceState extends State<DesktopWorkspace> {
 
   Widget _buildPage() => switch (_page) {
     1 => TasksPage(
+      api: _api,
+      monitor: _monitor,
       runs: _runs,
       archivedRuns: _archivedRuns,
       onOpenAssistant: () => _selectPage(0),

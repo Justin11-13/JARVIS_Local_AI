@@ -13,6 +13,42 @@ class JarvisApi {
 
   void close() => _client.close(force: true);
 
+  Future<Map<String, dynamic>> assistantRequest(
+    String method,
+    String path, {
+    Map<String, dynamic>? body,
+  }) => _request(method, path, body: body);
+
+  Stream<Map<String, dynamic>> codingEvents(String id, int after) async* {
+    final client = HttpClient();
+    client.connectionTimeout = const Duration(seconds: 3);
+    try {
+      final request = await client.getUrl(
+        _base.replace(
+          path: '/tasks/$id/events',
+          queryParameters: {'after': '$after'},
+        ),
+      );
+      final response = await request.close();
+      if (response.statusCode != 200) {
+        throw JarvisApiException(
+          'Event stream failed (${response.statusCode}).',
+        );
+      }
+      String data = '';
+      await for (final line
+          in response.transform(utf8.decoder).transform(const LineSplitter())) {
+        if (line.startsWith('data:')) data += line.substring(5).trimLeft();
+        if (line.isEmpty && data.isNotEmpty) {
+          yield jsonDecode(data) as Map<String, dynamic>;
+          data = '';
+        }
+      }
+    } finally {
+      client.close(force: true);
+    }
+  }
+
   Future<SystemSample> telemetry() async =>
       SystemSample.fromJson(await _request('GET', '/api/telemetry'));
 
@@ -84,6 +120,28 @@ class JarvisApi {
   Future<void> reindexObsidian() async {
     await _request('POST', '/api/obsidian/reindex');
   }
+
+  Future<List<BackgroundTask>> backgroundTasks() async {
+    final response = await _request('GET', '/api/background-tasks');
+    return (response['tasks'] as List<dynamic>? ?? const [])
+        .map((item) => BackgroundTask.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<BackgroundTask> createBackgroundTask(String kind) async =>
+      BackgroundTask.fromJson(
+        await _request('POST', '/api/background-tasks', body: {'kind': kind}),
+      );
+
+  Future<BackgroundTask> cancelBackgroundTask(String taskId) async =>
+      BackgroundTask.fromJson(
+        await _request('POST', '/api/background-tasks/$taskId/cancel'),
+      );
+
+  Future<BackgroundTask> retryBackgroundTask(String taskId) async =>
+      BackgroundTask.fromJson(
+        await _request('POST', '/api/background-tasks/$taskId/retry'),
+      );
 
   Future<void> openObsidianNote(String vaultId, String relativePath) async {
     await _request(
@@ -325,12 +383,62 @@ class GpuSample {
 }
 
 class JarvisHealth {
-  const JarvisHealth({
-    required this.status,
-    required this.brain,
-  });
+  const JarvisHealth({required this.status, required this.brain});
   final String status;
   final String brain;
+}
+
+class BackgroundTask {
+  const BackgroundTask({
+    required this.id,
+    required this.title,
+    required this.kind,
+    required this.status,
+    required this.progress,
+    required this.progressMessage,
+    required this.result,
+    required this.error,
+    required this.verification,
+    required this.attempt,
+    required this.durationSeconds,
+    required this.notification,
+  });
+
+  factory BackgroundTask.fromJson(Map<String, dynamic> json) => BackgroundTask(
+    id: json['id'] as String? ?? '',
+    title: json['title'] as String? ?? 'Background task',
+    kind: json['kind'] as String? ?? '',
+    status: json['status'] as String? ?? 'unknown',
+    progress: json['progress'] as int? ?? 0,
+    progressMessage: json['progress_message'] as String? ?? '',
+    result: json['result'] as String? ?? '',
+    error: json['error'] as String? ?? '',
+    verification: json['verification'] as String? ?? '',
+    attempt: json['attempt'] as int? ?? 1,
+    durationSeconds: (json['duration_seconds'] as num?)?.toDouble(),
+    notification: json['notification'] as String? ?? '',
+  );
+
+  final String id;
+  final String title;
+  final String kind;
+  final String status;
+  final int progress;
+  final String progressMessage;
+  final String result;
+  final String error;
+  final String verification;
+  final int attempt;
+  final double? durationSeconds;
+  final String notification;
+
+  bool get active => const {
+    'queued',
+    'running',
+    'waiting_approval',
+    'cancelling',
+    'verifying',
+  }.contains(status);
 }
 
 class JarvisChatReply {

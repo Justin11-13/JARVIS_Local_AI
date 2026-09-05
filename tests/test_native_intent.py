@@ -4,6 +4,11 @@ from services.native_intent import resolve_native_intent
 
 
 class NativeIntentTests(unittest.TestCase):
+    def test_content_open_requests_are_not_application_launches(self):
+        for request in ("open the python tutorial", "打开 Python 教程", "open my notes", "open https://python.org"):
+            with self.subTest(request=request):
+                self.assertIsNone(resolve_native_intent(request))
+
     def test_system_usage_request_maps_to_existing_read_only_tool(self):
         for request in (
             "我的 CPU 和 RAM 现在用了多少？",

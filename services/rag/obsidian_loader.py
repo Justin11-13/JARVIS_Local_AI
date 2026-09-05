@@ -23,6 +23,8 @@ def load_obsidian_documents(vault: dict) -> list[dict]:
     documents = []
     for file_path in sorted(root.rglob("*.md")):
         relative = file_path.relative_to(root)
+        if file_path.name.casefold() in {'agents.md', 'agents.md.md'}:
+            continue
         if any(part.casefold() in SKIPPED_DIRECTORIES or part.startswith(".") for part in relative.parts[:-1]):
             continue
         try:
@@ -45,7 +47,7 @@ def load_obsidian_documents(vault: dict) -> list[dict]:
             "source": f"obsidian://{vault['id']}/{relative_path}",
             "source_path": relative_path,
             "source_type": "obsidian",
-            "knowledge_domain": "obsidian",
+            "knowledge_domain": "jarvis" if relative.parts[0].casefold() == 'jarvis' else "obsidian",
             "vault_id": vault["id"],
             "vault_name": vault["name"],
             "title": str(properties.get("title") or file_path.stem),
@@ -55,7 +57,9 @@ def load_obsidian_documents(vault: dict) -> list[dict]:
             "status": str(properties.get("status", "current")),
             "authority": str(properties.get("authority", "personal")),
             "source_url": str(properties.get("source_url", "")),
-            "updated_at": str(properties.get("updated_at", "")),
+            "updated_at": str(properties.get("updated_at") or properties.get('updated', '')),
+            "created_at": str(properties.get("created_at") or properties.get('created', '')),
+            **{key: str(properties.get(key, '')) for key in ('type', 'category', 'project', 'component', 'superseded_by')},
             "content": content.strip(),
             "index_material": raw_content.strip(),
         })

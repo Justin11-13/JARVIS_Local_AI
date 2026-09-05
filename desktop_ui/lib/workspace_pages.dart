@@ -5,6 +5,7 @@ import 'jarvis_api.dart';
 import 'runtime_monitor.dart';
 import 'runtime_panel.dart';
 import 'speech_controller.dart';
+import 'coding_memory_panel.dart';
 
 class SessionRun {
   SessionRun(this.prompt) : started = DateTime.now(), restored = false;
@@ -288,146 +289,284 @@ class _QuickAction extends StatelessWidget {
 class TasksPage extends StatelessWidget {
   const TasksPage({
     super.key,
+    required this.api,
+    required this.monitor,
     required this.runs,
     required this.archivedRuns,
     required this.onOpenAssistant,
     required this.onOpenErrors,
   });
+  final JarvisApi api;
+  final RuntimeMonitor monitor;
   final List<SessionRun> runs;
   final List<SessionRun> archivedRuns;
   final VoidCallback onOpenAssistant;
   final VoidCallback onOpenErrors;
   @override
-  Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.all(28),
-    children: [
-      const _PageHeading(
-        'Conversation archive.',
-        'Current requests and earlier Assistant conversations, kept locally on this device.',
-      ),
-      const SizedBox(height: 28),
-      if (runs.isEmpty && archivedRuns.isEmpty)
-        ConsolePanel(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 28),
-            child: Column(
-              children: [
-                const Icon(
-                  Icons.account_tree_outlined,
-                  size: 36,
-                  color: ConsoleColors.accent,
-                ),
-                const SizedBox(height: 18),
-                const Text(
-                  'No saved conversations yet',
-                  style: TextStyle(fontSize: 18),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Start in Assistant. Current requests appear here, and completed sessions remain available after restart.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: ConsoleColors.muted, height: 1.6),
-                ),
-                const SizedBox(height: 20),
-                OutlinedButton(
-                  onPressed: onOpenAssistant,
-                  child: const Text('Open Assistant'),
-                ),
-              ],
-            ),
-          ),
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: monitor,
+    builder: (context, _) => ListView(
+      padding: const EdgeInsets.all(28),
+      children: [
+        const _PageHeading(
+          'Background work.',
+          'Run declared local jobs without blocking Assistant. Results are persisted and verified.',
         ),
-      if (runs.isNotEmpty) ...[
-        Text('Current session · ${runs.length}', style: metadataStyle),
-        const SizedBox(height: 16),
-        for (final run in runs.reversed)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: ConsolePanel(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      StatusLabel(run.status, color: run.color),
-                      const Spacer(),
-                      Text(clockLabel(run.started), style: metadataStyle),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  SelectableText(
-                    run.prompt,
-                    style: const TextStyle(fontSize: 14, height: 1.6),
-                  ),
-                  if (run.error != null || run.toolFailure)
-                    TextButton.icon(
-                      onPressed: onOpenErrors,
-                      icon: const Icon(Icons.info_outline, size: 16),
-                      label: const Text('View errors'),
-                    ),
-                  const SizedBox(height: 10),
-                  TextButton.icon(
-                    onPressed: onOpenAssistant,
-                    icon: const Icon(Icons.arrow_outward, size: 16),
-                    label: const Text('View conversation'),
-                  ),
-                ],
-              ),
-            ),
+        const SizedBox(height: 20),
+        ExpansionTile(
+          tilePadding: EdgeInsets.zero,
+          title: const Text('Coding & memory'),
+          subtitle: const Text(
+            'Delegate coding tasks and review long-term memory.',
           ),
-      ],
-      if (runs.isNotEmpty && archivedRuns.isNotEmpty)
-        const SizedBox(height: 24),
-      if (archivedRuns.isNotEmpty) ...[
-        Text(
-          'Previous sessions · ${archivedRuns.length}',
-          style: metadataStyle,
+          children: [CodingMemoryPanel(api: api)],
         ),
-        const SizedBox(height: 16),
-        for (final run in archivedRuns.reversed)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: ConsolePanel(
-              child: Material(
-                type: MaterialType.transparency,
-                child: ExpansionTile(
-                  tilePadding: EdgeInsets.zero,
-                  childrenPadding: const EdgeInsets.only(top: 4, bottom: 8),
-                  title: Text(
-                    run.prompt,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 14, height: 1.5),
-                  ),
-                  subtitle: Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Row(
+        const SizedBox(height: 20),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            FilledButton.icon(
+              onPressed: monitor.online
+                  ? () async {
+                      await api.createBackgroundTask('project_scan');
+                      await monitor.refresh();
+                    }
+                  : null,
+              icon: const Icon(Icons.folder_open_outlined, size: 18),
+              label: const Text('Scan projects'),
+            ),
+            OutlinedButton.icon(
+              onPressed: monitor.online
+                  ? () async {
+                      await api.createBackgroundTask('knowledge_reindex');
+                      await monitor.refresh();
+                    }
+                  : null,
+              icon: const Icon(Icons.auto_awesome_motion_outlined, size: 18),
+              label: const Text('Reindex knowledge'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        if (monitor.backgroundTasks.isEmpty)
+          const ConsolePanel(
+            child: Text(
+              'No background tasks yet.',
+              style: TextStyle(color: ConsoleColors.muted),
+            ),
+          )
+        else
+          for (final task in monitor.backgroundTasks)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: ConsolePanel(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       children: [
-                        StatusLabel(run.status, color: run.color),
-                        const SizedBox(width: 12),
-                        Text(clockLabel(run.started), style: metadataStyle),
+                        Expanded(
+                          child: Text(
+                            task.title,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        StatusLabel(task.status.replaceAll('_', ' ')),
                       ],
                     ),
-                  ),
-                  children: [
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: SelectableText(
-                        run.reply?.reply ?? 'No reply was saved.',
+                    const SizedBox(height: 12),
+                    LinearProgressIndicator(value: task.progress / 100),
+                    const SizedBox(height: 10),
+                    Text(task.progressMessage, style: metadataStyle),
+                    if (task.verification.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Verified: ${task.verification}',
                         style: const TextStyle(
-                          color: ConsoleColors.muted,
-                          fontSize: 13,
-                          height: 1.7,
+                          color: ConsoleColors.good,
+                          fontSize: 12,
                         ),
                       ),
+                    ],
+                    if (task.notification.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(task.notification, style: metadataStyle),
+                    ],
+                    if (task.error.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        task.error,
+                        style: const TextStyle(
+                          color: ConsoleColors.danger,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Text('Attempt ${task.attempt}', style: metadataStyle),
+                        const Spacer(),
+                        if (task.active)
+                          TextButton.icon(
+                            onPressed: () async {
+                              await api.cancelBackgroundTask(task.id);
+                              await monitor.refresh();
+                            },
+                            icon: const Icon(
+                              Icons.stop_circle_outlined,
+                              size: 17,
+                            ),
+                            label: const Text('Cancel'),
+                          )
+                        else if (task.status != 'completed')
+                          TextButton.icon(
+                            onPressed: () async {
+                              await api.retryBackgroundTask(task.id);
+                              await monitor.refresh();
+                            },
+                            icon: const Icon(Icons.refresh, size: 17),
+                            label: const Text('Retry'),
+                          ),
+                      ],
                     ),
                   ],
                 ),
               ),
             ),
+        const SizedBox(height: 32),
+        const _PageHeading(
+          'Conversation archive.',
+          'Current requests and earlier Assistant conversations, kept locally on this device.',
+        ),
+        const SizedBox(height: 28),
+        if (runs.isEmpty && archivedRuns.isEmpty)
+          ConsolePanel(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 28),
+              child: Column(
+                children: [
+                  const Icon(
+                    Icons.account_tree_outlined,
+                    size: 36,
+                    color: ConsoleColors.accent,
+                  ),
+                  const SizedBox(height: 18),
+                  const Text(
+                    'No saved conversations yet',
+                    style: TextStyle(fontSize: 18),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Start in Assistant. Current requests appear here, and completed sessions remain available after restart.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: ConsoleColors.muted, height: 1.6),
+                  ),
+                  const SizedBox(height: 20),
+                  OutlinedButton(
+                    onPressed: onOpenAssistant,
+                    child: const Text('Open Assistant'),
+                  ),
+                ],
+              ),
+            ),
           ),
+        if (runs.isNotEmpty) ...[
+          Text('Current session · ${runs.length}', style: metadataStyle),
+          const SizedBox(height: 16),
+          for (final run in runs.reversed)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: ConsolePanel(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        StatusLabel(run.status, color: run.color),
+                        const Spacer(),
+                        Text(clockLabel(run.started), style: metadataStyle),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    SelectableText(
+                      run.prompt,
+                      style: const TextStyle(fontSize: 14, height: 1.6),
+                    ),
+                    if (run.error != null || run.toolFailure)
+                      TextButton.icon(
+                        onPressed: onOpenErrors,
+                        icon: const Icon(Icons.info_outline, size: 16),
+                        label: const Text('View errors'),
+                      ),
+                    const SizedBox(height: 10),
+                    TextButton.icon(
+                      onPressed: onOpenAssistant,
+                      icon: const Icon(Icons.arrow_outward, size: 16),
+                      label: const Text('View conversation'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+        if (runs.isNotEmpty && archivedRuns.isNotEmpty)
+          const SizedBox(height: 24),
+        if (archivedRuns.isNotEmpty) ...[
+          Text(
+            'Previous sessions · ${archivedRuns.length}',
+            style: metadataStyle,
+          ),
+          const SizedBox(height: 16),
+          for (final run in archivedRuns.reversed)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: ConsolePanel(
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    childrenPadding: const EdgeInsets.only(top: 4, bottom: 8),
+                    title: Text(
+                      run.prompt,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 14, height: 1.5),
+                    ),
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Row(
+                        children: [
+                          StatusLabel(run.status, color: run.color),
+                          const SizedBox(width: 12),
+                          Text(clockLabel(run.started), style: metadataStyle),
+                        ],
+                      ),
+                    ),
+                    children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: SelectableText(
+                          run.reply?.reply ?? 'No reply was saved.',
+                          style: const TextStyle(
+                            color: ConsoleColors.muted,
+                            fontSize: 13,
+                            height: 1.7,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
       ],
-    ],
+    ),
   );
 }
 
@@ -897,13 +1036,9 @@ class SettingsPage extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               RuntimeRow('Brain', monitor.health?.brain ?? 'Not available'),
-              RuntimeRow(
-                'Routing',
-                monitor.health?.routingMode ?? 'Not available',
-              ),
               const SizedBox(height: 12),
               const Text(
-                'Read from Core. Changing the brain or routing in this UI is not connected yet.',
+                'Read from Core. Changing the brain in this UI is not connected yet.',
                 style: TextStyle(
                   color: ConsoleColors.muted,
                   fontSize: 12,

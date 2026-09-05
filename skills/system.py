@@ -29,7 +29,7 @@ def open_app(app: str) -> str:
         match = find_app(app)
 
     if not match:
-        return (
+        raise FileNotFoundError(
             f"Application '{app}' "
             "could not be found."
         )
@@ -44,13 +44,13 @@ def open_app(app: str) -> str:
     )
 
     if not shortcut:
-        return (
+        raise FileNotFoundError(
             f"Application '{name}' "
             "does not have a launch shortcut."
         )
 
     if not os.path.exists(shortcut):
-        return (
+        raise FileNotFoundError(
             f"Shortcut for '{name}' "
             "does not exist."
         )
@@ -63,7 +63,7 @@ def open_app(app: str) -> str:
         )
 
     except OSError as error:
-        return (
+        raise OSError(
             f"Failed to open '{name}': "
             f"{error}"
         )

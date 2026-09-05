@@ -12,6 +12,7 @@ class RuntimeMonitor extends ChangeNotifier with WidgetsBindingObserver {
   JarvisHealth? health;
   SystemSample? sample;
   WindowsSpeechSettings? speechSettings;
+  List<BackgroundTask> backgroundTasks = const [];
   String? speechSettingsError;
   final List<SystemSample> history = [];
   String? error;
@@ -87,6 +88,8 @@ class RuntimeMonitor extends ChangeNotifier with WidgetsBindingObserver {
         speechSettings = null;
         speechSettingsError = failure.message;
       }
+      if (_disposed) return;
+      backgroundTasks = await api.backgroundTasks();
       if (_disposed) return;
       online = true;
       error = null;

@@ -170,22 +170,11 @@ class RuntimePanel extends StatelessWidget {
                       monitor.health?.brain ?? 'Not available',
                     ),
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _RuntimeField(
-                      'Routing',
-                      monitor.health?.routingMode ?? 'Not available',
-                    ),
-                  ),
                 ],
               )
             else ...[
               RuntimeRow('API', monitor.online ? 'Connected' : 'Not connected'),
               RuntimeRow('Brain', monitor.health?.brain ?? 'Not available'),
-              RuntimeRow(
-                'Routing',
-                monitor.health?.routingMode ?? 'Not available',
-              ),
             ],
             const SizedBox(height: 10),
             const Text('127.0.0.1:8765', style: metadataStyle),

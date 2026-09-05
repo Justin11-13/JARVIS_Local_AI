@@ -9,6 +9,7 @@ from urllib.parse import quote
 
 from services.rag.source_registry import load_obsidian_vaults
 from services.rag.obsidian_loader import load_obsidian_documents
+from services.rag.frontmatter_parser import parse_frontmatter
 
 BLOCKED_PARTS = {".obsidian", ".trash", ".git"}
 DEFAULT_FRONTMATTER = {
@@ -89,12 +90,32 @@ def search_obsidian_notes(keyword: str, vault_id: str = "") -> str:
     vaults = [_vault(vault_id)] if vault_id else load_obsidian_vaults()
     for vault in vaults:
         for document in load_obsidian_documents(vault):
+            if document["access"] != "rag":
+                continue
             searchable = " ".join((document["source_path"], document["title"], " ".join(document["aliases"]), " ".join(document["tags"]), document["content"])).casefold()
             if term in searchable:
                 matches.append(f"{vault['id']}:{document['source_path']}")
                 if len(matches) >= 20:
                     return "\n".join(matches)
     return "\n".join(matches) if matches else "No matching Obsidian notes were found."
+
+
+def read_obsidian_note(vault_id: str, relative_path: str) -> str:
+    """Read a bounded, explicitly shared note for the external reasoning model."""
+    vault, target, clean = _safe_note(vault_id, relative_path, must_exist=True)
+    if any(part.startswith(".") or part.casefold() in {"attachments", "node_modules"} for part in Path(clean).parts):
+        raise ValueError("The Obsidian note path is protected.")
+    with target.open("rb") as handle:
+        raw = handle.read(100_001)
+    if len(raw) > 100_000:
+        raise ValueError("The note exceeds the 100 KB read limit; use knowledge retrieval for sections.")
+    properties, content = parse_frontmatter(raw.decode("utf-8-sig").replace("\r\n", "\n").replace("\r", "\n"))
+    access = str(properties.get("jarvis_access", vault.get("default_access", "excluded"))).casefold()
+    if access != "rag":
+        raise ValueError("This note is not shared for external reasoning (jarvis_access must be rag).")
+    excerpt = content[:6000]
+    suffix = "\n[Truncated: only the first 6000 characters were read into context.]" if len(content) > 6000 else ""
+    return f"Source: {vault_id}:{clean}\n{excerpt}{suffix}"
 
 
 def open_obsidian_note(vault_id: str, relative_path: str) -> str:

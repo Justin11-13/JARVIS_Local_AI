@@ -10,6 +10,7 @@ from pathlib import Path
 
 from services.agents.gemini import GeminiAdapter
 from services.byok_config import load_byok_config
+from services.background_task_service import BackgroundTaskService, TaskContext
 from services.notification_service import NotificationService
 from services.jarvis_memory import JarvisMemory
 from services.task_manager import TaskManager
@@ -19,11 +20,12 @@ from skills.git import git_status
 from skills.project import (
     get_project_info,
     list_projects,
+    load_projects,
     open_project,
     refresh_project_registry,
 )
 from skills.system import get_system_info, open_app
-from skills.obsidian import append_obsidian_note, create_obsidian_note, open_obsidian_note, search_obsidian_notes, update_obsidian_note
+from skills.obsidian import append_obsidian_note, create_obsidian_note, open_obsidian_note, read_obsidian_note, search_obsidian_notes, update_obsidian_note
 from skills.windows import (
     adjust_volume,
     get_battery_status,
@@ -45,11 +47,16 @@ BRAIN_PROVIDER = byok_config.provider
 BRAIN_MODEL = byok_config.model
 gemini = GeminiAdapter()
 BRAIN_STATUS = "unsupported" if byok_config.error else ("configured" if gemini.is_configured() else "not_configured")
-task_manager = TaskManager()
+task_manager = TaskManager(
+    Path(__file__).resolve().parents[1] / "data" / "tasks.json",
+    database_path=Path(__file__).resolve().parents[1] / "data" / "memory" / "jarvis.sqlite3",
+)
 notification_service = NotificationService()
+background_tasks = BackgroundTaskService(task_manager, notification_service)
 jarvis_memory = JarvisMemory(
     max_turns=100,
     context_turns=6,
+    database_path=Path(__file__).resolve().parents[1] / "data" / "memory" / "jarvis.sqlite3",
     storage_path=(
         Path(__file__).resolve().parents[1]
         / "data"
@@ -61,6 +68,23 @@ task_router = TaskRouter(
     task_manager=task_manager,
     notification_service=notification_service,
 )
+
+
+def _run_project_scan(context: TaskContext, payload: dict) -> str:
+    context.checkpoint(15, "Scanning configured project roots.")
+    result = refresh_project_registry()
+    context.checkpoint(80, "Project registry refreshed.")
+    return result
+
+
+def _verify_project_scan(payload: dict, result: str) -> tuple[bool, str]:
+    projects = load_projects()
+    if not isinstance(projects, dict):
+        return False, "Project registry could not be read after the scan."
+    return True, f"Registry loaded successfully with {len(projects)} project(s)."
+
+
+background_tasks.register("project_scan", _run_project_scan, _verify_project_scan)
 
 
 AVAILABLE_TOOLS = {
@@ -86,6 +110,7 @@ AVAILABLE_TOOLS = {
     "shutdown_computer": shutdown_computer,
     "restart_computer": restart_computer,
     "sleep_computer": sleep_computer,
+    "read_obsidian_note": read_obsidian_note,
     "search_obsidian_notes": search_obsidian_notes,
     "open_obsidian_note": open_obsidian_note,
     "create_obsidian_note": create_obsidian_note,

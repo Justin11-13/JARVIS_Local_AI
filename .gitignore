@@ -113,6 +113,7 @@ PROJECT_SCOPE.md
 data/rag/chroma/
 data/rag/index_manifest.json
 data/memory/
+data/tasks.json
 
 # Personal standalone UI prototype
 Jarvis_UI.html

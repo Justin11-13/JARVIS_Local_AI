@@ -108,6 +108,9 @@ def _extract_app_name(text: str) -> str | None:
         return None
 
     app_name = match.group(1).strip()
+    # Content targets need reasoning/search, not a Windows app launch.
+    if re.search(r"\b(tutorials?|notes?|guides?|documents?|files?|folders?|websites?|https?)\b|教程|笔记|指南|资料|文件|网站", app_name):
+        return None
     # Compound requests must not silently execute only their first clause.
     blocked_fragments = {"然后", "再", "并且", "and then", " then ", ";", "；"}
     if not app_name or any(fragment in app_name for fragment in blocked_fragments):
