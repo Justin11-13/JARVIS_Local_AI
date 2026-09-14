@@ -67,6 +67,15 @@ test('speech chunker emits sentence boundaries and flushes the remainder', () =>
   assert.deepEqual(chunker.flush(), ['Second']);
 });
 
+test('speech chunker reports a short buffered reply before the final flush', () => {
+  const chunker = new SpeechChunker();
+  assert.equal(chunker.hasPendingText(), false);
+  assert.deepEqual(chunker.push('Short reply.'), []);
+  assert.equal(chunker.hasPendingText(), true);
+  assert.deepEqual(chunker.flush(), ['Short reply.']);
+  assert.equal(chunker.hasPendingText(), false);
+});
+
 test('speech chunker keeps comma phrases together until a sentence boundary', () => {
   const chunker = new SpeechChunker({ minChars: 5, maxChars: 40 });
   assert.deepEqual(chunker.push('我帮你检查过了，继续处理这个问题。下一步'), ['我帮你检查过了，继续处理这个问题。']);
