@@ -107,6 +107,10 @@ build/
 dist/
 *.egg-info/
 
+# Internal Test packaging outputs
+packaging/core-build/
+packaging/core-dist/
+
 AGENTS.md
 PROJECT_SCOPE.md
 

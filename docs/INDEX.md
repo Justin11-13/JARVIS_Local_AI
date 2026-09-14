@@ -8,6 +8,7 @@ Engineering rules: [AGENTS](../AGENTS.md), project-local only. 不修改全局 C
 
 - [Current State](info/01-project-overview/CURRENT_STATE.md)：基线与已存在/未存在能力。
 - [Electron + JARVIS Core Windows Packaging](info/05-integrations/ELECTRON_CORE_PACKAGING.md)：Internal Test 完整 Core + Electron 资源边界、AppData 数据边界、NSIS 可选安装目录与实际验证证据。
+- [Electron Internal Test Update Notice](prompts/feature/20260914-FEAT-electron-update-notice.md)：固定 GitHub Releases channel、版本/asset 校验、启动与手动检查、显式下载页面和失败状态边界。
 - [Software-Level PC Control](info/05-integrations/SOFTWARE_PC_CONTROL.md)：Audio/Brightness/Wallpaper/Windows OS Theme/System Status 到 Keyboard/Mouse 的全部 written software-control phases、canonical registry/schema/permission/native-intent boundary、显式 unsupported limits 和 Windows runtime acceptance 边界。
 - [Software-Level PC Control Audio](prompts/feature/20260913-FEAT-software-pc-control-audio.md)：Audio domain 的分阶段 PC control 实施记录。
 - [Software-Level PC Control Brightness](prompts/feature/20260913-FEAT-software-pc-control-brightness.md)：Brightness domain 的完整实施、验证和 Windows runtime 限制记录。

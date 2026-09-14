@@ -93,9 +93,16 @@ Status: CURRENT, source/static-inspected; Audio/Brightness/Wallpaper/Windows OS 
   renderer。两个 shortcut 已在用户 Desktop 创建并复核其工作目录、参数与描述；main process 现在将前者标题固定为
   `JARVIS · 开发版`、后者固定为 `JARVIS · 内测版`，并阻止 renderer 静态 `<title>` 覆盖版本标识；该入口仅用于 WebGL
   视觉/交互与 M3a Core foreground contract 测试，连接只经固定 bridge；
-  它不是正式 UI、EXE package 或 Flutter 替代品。M3a 与本次 availability FIX 当前仍 `IN PROGRESS`：
+  它不是正式 UI 或 Flutter 替代品；独立的 `electron_motion_preview_internal_test/` 目录负责完整的 Electron + packaged Core 内测安装器。M3a 与本次 availability FIX 当前仍 `IN PROGRESS`：
   source/static/supervisor tests 通过，但当前受限 host 的 Python ACL 使真实 supervisor cold start 返回
   `拒绝访问`，所以 Core/Luna/native UI 观察尚未称为 verified，也没有加入 GPU workaround。
+- Internal Test packaging：`electron_motion_preview_internal_test/` 负责 NSIS build，`packaging/` 负责 PyInstaller
+  `onedir` Core 与 Windows x64 Codex CLI preparation。生成的安装包不进入 source control，而是通过 GitHub Releases
+  发布。
+- Internal Test update notice：`update-checker.cjs` 由内测版 main process 持有，只接受固定 HTTPS GitHub Release
+  channel 与精确的 `JARVIS-Internal-Test-<version>-Setup.exe` asset。preload 仅暴露
+  `window.jarvisUpdate.check()`/`open()`；Renderer 启动后检查一次，Settings 提供 `Check now`，新 Release 才显示
+  `UPDATE AVAILABLE`，下载仍是经过验证的 Release-page 显式操作。
 - Conversation boundary：当前窗口 transcript 由 `conversation-store.js` 按 turn 追加并在 DOM 上写入
   `data-turn-id`；confirmation decision 复用原 turn，stale epoch response 被拒绝。terminal turn 由 Core
   通过 `JarvisMemory` 写入 `data/memory/conversation.json`，`/api/chat/conversations` 列表和

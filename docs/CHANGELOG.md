@@ -1,5 +1,18 @@
 # Changelog / 改动时间线
 
+## 2026-09-14 — Electron Internal Test Update Notice and Rebuild Handoff (IMPLEMENTED — source/static/Node/package verified)
+
+Internal Test Electron now checks the fixed GitHub Releases API once after startup and exposes
+`Settings → Application updates → Check now`. Only a newer published Release with the exact
+`JARVIS-Internal-Test-<version>-Setup.exe` asset shows `UPDATE AVAILABLE`; `Download update` opens the validated
+Release page and never silently downloads, installs, or restarts. The source package is now kept under
+`electron_motion_preview_internal_test/` with `packaging/` build scripts; generated binaries remain Release assets.
+The final rebuilt installer is `816,647,011` bytes with SHA-256
+`3501645D93FF9A73402998488A0BA4D90E470F919F8563CCA4501FD17E4EE8B3`; the Electron Node suite passed `64/64`.
+The unsigned package could not be launched on this host because Windows Application Control blocked the generated
+Core/Electron binaries; no policy bypass was attempted. Details: [Electron Internal Test Update Notice](prompts/feature/20260914-FEAT-electron-update-notice.md)
+and [Electron + JARVIS Core Windows Packaging](info/05-integrations/ELECTRON_CORE_PACKAGING.md).
+
 ## 2026-09-14 — Electron Custom Theme Palette (IMPLEMENTED — source/static/Node verified; package handoff pending)
 
 两套 Electron edition 的 Theme page 新增本地调色盘，用户可即时调整 background、surface、border、accent、text、muted、Core A 与 Core B，颜色经过白名单与 `#RRGGBB` 校验后保存到 edition-local storage，并可 Reset 回四个既有 preset。CSS token 与 hologram Core palette 继续通过既有 renderer contract 同步；未改变 Core/API、bridge、权限或 package dependency。两套 static verifier、Node suite 均通过 `59/59`，`unified.js` syntax check 通过；正常 Electron visual 与安装包重打包交由 release handoff。详情见 [Electron Custom Theme Palette](prompts/feature/20260914-FEAT-electron-custom-theme-palette.md)。

@@ -1,0 +1,66 @@
+{
+  "name": "jarvis-electron-motion-preview",
+  "version": "0.1.0",
+  "private": true,
+  "description": "JARVIS Internal Test Electron client with the bundled local Core runtime.",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "verify:static": "node test/static-verify.cjs",
+    "verify": "electron . --verify",
+    "build:core": "powershell -NoProfile -ExecutionPolicy Bypass -File ..\\packaging\\build-core.ps1",
+    "package:win": "npm run build:core && electron-builder --win nsis --x64",
+    "package:dir": "npm run build:core && electron-builder --win dir --x64"
+  },
+  "devDependencies": {
+    "@openai/codex": "0.153.2",
+    "@electron/packager": "^19.0.0",
+    "electron": "^39.0.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.jarvis.internal-test",
+    "productName": "JARVIS 内测版",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "core-bridge.cjs",
+      "core-supervisor.cjs",
+      "runtime-settings.cjs",
+      "update-checker.cjs",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../packaging/core-dist/jarvis-core",
+        "to": "core"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "JARVIS-Internal-Test-${version}-Setup.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "JARVIS 内测版"
+    }
+  },
+  "allowScripts": {
+    "electron@39.8.10": true
+  }
+}

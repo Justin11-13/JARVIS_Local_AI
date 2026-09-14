@@ -50,23 +50,33 @@ preview、无 reparse point、无内容、无源码/配置/Git 引用后，已�
 
 ### Internal Test packaged Windows installer / 内测版完整 Windows 安装器
 
-Status: IMPLEMENTED — local package and packaged runtime verified on this host; clean-machine installer acceptance remains pending.
+Status: IMPLEMENTED — final local package and packaged content verified; newly generated unsigned Core/Electron runtime launch is blocked by Windows Application Control on this host; clean-machine installer acceptance remains pending.
 
 `electron_motion_preview_internal_test/` now builds a complete x64 NSIS installer rather than an Electron-only shell.
 PyInstaller produces the Core `onedir` runtime, Electron Builder places it at
 `resources/core/jarvis-core.exe`, and NSIS uses `oneClick=false` with
 `allowToChangeInstallationDirectory=true`, so the user can choose the install directory. The final local artifact is
-`electron_motion_preview_internal_test/release/JARVIS-Internal-Test-0.1.0-Setup.exe` (816,689,185 bytes in the current build,
-SHA-256 `815194F323DE8B53D5E1B0B0E69A059D08C77EC13617DA572B3326C03163FC97`).
+`electron_motion_preview_internal_test/release/JARVIS-Internal-Test-0.1.0-Setup.exe` (816,647,011 bytes in the current build,
+SHA-256 `3501645D93FF9A73402998488A0BA4D90E470F919F8563CCA4501FD17E4EE8B3`).
 The package also includes the Windows x64 native Codex CLI App Server at
 `resources/core/codex/codex.exe`; users do not need to install Node.js, npm or Codex CLI separately. The user's ChatGPT/Codex
 login remains user-owned and is not embedded in the installer.
-Packaged Core startup, independent health, packaged Electron `--verify`, normal Electron-to-Core startup/shutdown,
-static/Node tests, Python compileall, and runtime-path assertions passed. The installer itself has not yet been
-installed under a separate clean Windows account; that destination chooser and clean-machine pass remain pending.
+The static verifier and Node suite (`64/64`) passed, and the packed `app.asar` contains the update checker, preload
+bridge, and update-notice UI markers. A live check against the fixed GitHub Releases API returned the explicit
+`not_published` status for current version `0.1.0`; no update was claimed. The final generated unsigned Core and
+Electron binaries could not be launched on this host because Windows Application Control blocked them; no policy
+bypass was attempted. The installer itself has not yet been installed under a separate clean Windows account, so
+the destination chooser and clean-machine pass remain pending.
 Read-only package resources and safe default registries are bundled; `.env`, credentials, current-machine config/data,
 Obsidian Vault contents and personal project/app paths are excluded. Mutable state is written to
 `%LOCALAPPDATA%\JARVIS\InternalTest`.
+
+The packaged Internal Test client now has an explicit update-notice flow. Its Electron main process checks the fixed
+GitHub Releases API once after startup and exposes a manual `Settings → Application updates → Check now` action
+through a narrow preload bridge. Only a newer published Release carrying a matching
+`JARVIS-Internal-Test-<version>-Setup.exe` asset produces the Chat header `UPDATE AVAILABLE` notice; the user then
+chooses `Download update` to open the validated Release page. Network failures, missing releases and unsupported
+development/source runs remain visible statuses; no silent download, install or restart is performed.
 
 ### Electron foreground Core client / Electron 前台 Core 测试入口
 
