@@ -21,12 +21,6 @@ The current public-facing milestone is **JARVIS Internal Test**. It packages the
 
 [安装 Install](#install--安装内测版) · [功能 Features](#current-features--当前功能) · [AI 连接](#ai-connections--ai-连接) · [Obsidian](#obsidian-optional--可选-obsidian) · [未来范围](#future-scope--未来范围) · [安全](#security-boundary--安全边界)
 
-## Desktop Preview / 桌面预览
-
-![JARVIS Assistant workspace](docs/screenshots/assistant-workspace.png)
-
-This is a development capture. Hardware values and response times are examples, not benchmarks.
-
 这是开发阶段截图。硬件数值和响应时间仅为当次示例，不代表性能基准。
 
 ## Editions / 版本
