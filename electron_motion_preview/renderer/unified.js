@@ -9,6 +9,31 @@ const themeLabels = Object.freeze({
   matrix: 'Matrix Green',
 });
 const themeKeys = new Set(Object.keys(themeLabels));
+const customThemeStorageKey = 'jarvis.ui.theme.custom.v1';
+const themePaletteFields = Object.freeze({
+  background: Object.freeze({ cssVariable: '--bg', controlId: 'theme-color-background', outputId: 'theme-color-background-value' }),
+  surface: Object.freeze({ cssVariable: '--surface', controlId: 'theme-color-surface', outputId: 'theme-color-surface-value' }),
+  border: Object.freeze({ cssVariable: '--line', controlId: 'theme-color-border', outputId: 'theme-color-border-value' }),
+  accent: Object.freeze({ cssVariable: '--gold', controlId: 'theme-color-accent', outputId: 'theme-color-accent-value' }),
+  text: Object.freeze({ cssVariable: '--text', controlId: 'theme-color-text', outputId: 'theme-color-text-value' }),
+  muted: Object.freeze({ cssVariable: '--muted', controlId: 'theme-color-muted', outputId: 'theme-color-muted-value' }),
+  coreA: Object.freeze({ cssVariable: '--core-color-a', controlId: 'theme-color-core-a', outputId: 'theme-color-core-a-value' }),
+  coreB: Object.freeze({ cssVariable: '--core-color-b', controlId: 'theme-color-core-b', outputId: 'theme-color-core-b-value' }),
+});
+const themePaletteKeys = Object.freeze(Object.keys(themePaletteFields));
+const customThemeStyleVariables = Object.freeze([
+  '--bg', '--surface', '--surface-2', '--surface-3', '--surface-rgb', '--surface-deep-rgb',
+  '--gold', '--gold-hot', '--amber', '--amber-dim', '--line', '--line-soft', '--border-strong',
+  '--button-bg', '--button-text', '--surface-hover', '--accent-hot', '--scrollbar', '--message-text',
+  '--placeholder', '--composer-bg', '--stage-bg', '--orbit-rgb', '--core-label', '--core-label-muted', '--monitor-bg',
+  '--control-label', '--control-border', '--control-bg', '--control-text', '--control-muted',
+  '--control-active-border', '--control-active-text', '--nav-text', '--nav-hover-border',
+  '--nav-active-border', '--tooltip-bg', '--dock-bg', '--panel-bg-top', '--panel-bg-bottom',
+  '--panel-scrollbar', '--detail-label', '--detail-value', '--caption', '--caption-muted', '--quiet',
+  '--muted', '--text', '--brand', '--row-hover', '--accent-rgb', '--warm-rgb', '--accent-glow',
+  '--tag', '--code-border', '--code-bg', '--code-text', '--readout', '--empty-border', '--select-border',
+  '--toggle-border', '--toggle-bg', '--core-color-a', '--core-color-b', '--core-glow', '--composer-border',
+]);
 const motionStorageKey = 'jarvis.motion.low.v1';
 const speechVoiceStorageKey = 'jarvis.auto-speech.voice.v1';
 const edition = new URLSearchParams(location.search).get('edition') === 'internal-test'
@@ -28,7 +53,30 @@ function readStoredTheme() {
   }
 }
 
+function normalizeThemeColor(value) {
+  const match = String(value || '').trim().match(/^#([0-9a-f]{6})$/i);
+  return match ? `#${match[1].toUpperCase()}` : null;
+}
+
+function readStoredCustomTheme() {
+  try {
+    const raw = localStorage.getItem(customThemeStorageKey);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return themePaletteKeys.reduce((result, key) => {
+      const color = normalizeThemeColor(parsed[key]);
+      if (color) result[key] = color;
+      return result;
+    }, {});
+  } catch {
+    return {};
+  }
+}
+
+let customThemeOverrides = readStoredCustomTheme();
 document.documentElement.dataset.theme = readStoredTheme();
+applyCustomThemeOverrides();
 
 const pages = {
   assistant: ['Assistant', 'Personal assistant', 'LIVE · LOOPBACK CORE'],
@@ -578,6 +626,122 @@ try {
 } catch (error) {
   $('#quality').textContent = '2D fallback';
   console.warn(error);
+}
+
+function themeColorChannels(value) {
+  const normalized = normalizeThemeColor(value);
+  if (!normalized) return null;
+  return [0, 2, 4].map((offset) => parseInt(normalized.slice(offset + 1, offset + 3), 16)).join(', ');
+}
+
+function themeColorRgba(value, alpha) {
+  const channels = themeColorChannels(value);
+  return channels ? `rgba(${channels}, ${alpha})` : null;
+}
+
+function cssColorToHex(value) {
+  const normalized = normalizeThemeColor(value);
+  if (normalized) return normalized;
+  const match = String(value || '').trim().match(/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/i);
+  if (!match) return null;
+  const channels = match.slice(1, 4).map((part) => Math.max(0, Math.min(255, Math.round(Number(part)))));
+  return `#${channels.map((part) => part.toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+}
+
+function applyCustomThemeOverrides() {
+  const root = document.documentElement;
+  customThemeStyleVariables.forEach((variable) => root.style.removeProperty(variable));
+  const set = (variable, value) => {
+    if (value) root.style.setProperty(variable, value);
+  };
+  const background = customThemeOverrides.background;
+  if (background) {
+    set('--bg', background);
+    set('--stage-bg', background);
+    set('--panel-bg-bottom', background);
+    set('--code-bg', background);
+    set('--row-hover', background);
+    set('--surface-deep-rgb', themeColorChannels(background));
+  }
+  const surface = customThemeOverrides.surface;
+  if (surface) {
+    const surfaceRgb = themeColorChannels(surface);
+    set('--surface', surface);
+    set('--surface-2', surface);
+    set('--surface-3', surface);
+    set('--surface-rgb', surfaceRgb);
+    set('--button-bg', surface);
+    set('--tooltip-bg', surface);
+    set('--control-bg', surface);
+    set('--toggle-bg', surface);
+    set('--surface-hover', surface);
+    set('--monitor-bg', themeColorRgba(surface, '.88'));
+    set('--dock-bg', themeColorRgba(surface, '.94'));
+    set('--panel-bg-top', themeColorRgba(surface, '.92'));
+    set('--composer-bg', themeColorRgba(surface, '.96'));
+  }
+  const border = customThemeOverrides.border;
+  if (border) {
+    set('--line', border);
+    set('--line-soft', themeColorRgba(border, '.38'));
+    set('--border-strong', border);
+    set('--select-border', border);
+    set('--control-border', border);
+    set('--nav-hover-border', border);
+    set('--empty-border', border);
+    set('--toggle-border', border);
+    set('--composer-border', border);
+    set('--code-border', themeColorRgba(border, '.55'));
+  }
+  const accent = customThemeOverrides.accent;
+  if (accent) {
+    const accentRgb = themeColorChannels(accent);
+    set('--gold', accent);
+    set('--amber', accent);
+    set('--amber-dim', themeColorRgba(accent, '.55'));
+    set('--accent-hot', accent);
+    set('--scrollbar', accent);
+    set('--accent-rgb', accentRgb);
+    set('--warm-rgb', accentRgb);
+    set('--orbit-rgb', accentRgb);
+    set('--accent-glow', accent);
+    set('--tag', accent);
+    set('--control-active-border', accent);
+    set('--nav-active-border', accent);
+  }
+  const text = customThemeOverrides.text;
+  if (text) {
+    set('--text', text);
+    set('--brand', text);
+    set('--gold-hot', text);
+    set('--button-text', text);
+    set('--message-text', text);
+    set('--detail-value', text);
+    set('--control-text', text);
+    set('--control-active-text', text);
+    set('--nav-text', text);
+    set('--core-label', text);
+  }
+  const muted = customThemeOverrides.muted;
+  if (muted) {
+    set('--muted', muted);
+    set('--quiet', muted);
+    set('--caption', muted);
+    set('--placeholder', muted);
+    set('--caption-muted', muted);
+    set('--detail-label', muted);
+    set('--readout', muted);
+    set('--control-muted', muted);
+    set('--core-label-muted', muted);
+    set('--code-text', muted);
+  }
+  const coreA = customThemeOverrides.coreA;
+  const coreB = customThemeOverrides.coreB;
+  if (coreA) {
+    set('--core-color-a', coreA);
+    set('--core-glow', themeColorRgba(coreA, '0'));
+  }
+  if (coreB) set('--core-color-b', coreB);
 }
 
 function cssHexToRgb(value) {
@@ -3138,7 +3302,10 @@ async function handleChatStreamEvent(stream, event) {
   };
   setResponseTime(stream.turn.assistantMessage, stream.metrics.responseCompletedAt - stream.metrics.requestReceivedAt);
   stream.completed = true;
+  const hasBufferedSpeech = typeof stream.chunker.hasPendingText === 'function'
+    && stream.chunker.hasPendingText();
   const terminalSpeech = stream.speechSequence === 0
+    && !hasBufferedSpeech
     && typeof response.speech === 'string'
     && response.speech.trim()
     ? response.speech
@@ -3502,6 +3669,7 @@ function syncThemeSetting() {
     : 'amber';
   control.value = theme;
   setText('theme-status', `${themeLabels[theme]} · active in this window.`);
+  syncThemePaletteControls();
 }
 
 function applyTheme(value) {
@@ -3512,9 +3680,72 @@ function applyTheme(value) {
   } catch (error) {
     console.warn(error);
   }
+  applyCustomThemeOverrides();
   syncCorePalette();
   syncThemeSetting();
   sync();
+}
+
+function themePaletteValue(key) {
+  const field = themePaletteFields[key];
+  if (!field) return '#000000';
+  if (customThemeOverrides[key]) return customThemeOverrides[key];
+  return cssColorToHex(getComputedStyle(document.documentElement).getPropertyValue(field.cssVariable)) || '#000000';
+}
+
+function syncThemePaletteControls() {
+  const overrideCount = Object.keys(customThemeOverrides).length;
+  themePaletteKeys.forEach((key) => {
+    const field = themePaletteFields[key];
+    const value = themePaletteValue(key);
+    const control = $(`#${field.controlId}`);
+    const output = $(`#${field.outputId}`);
+    if (control) control.value = value.toLowerCase();
+    if (output) output.textContent = value;
+  });
+  setText('theme-custom-status', overrideCount
+    ? `Custom palette · ${overrideCount} override${overrideCount === 1 ? '' : 's'} active.`
+    : 'Preset palette active · choose any color to customize.');
+}
+
+function persistCustomTheme() {
+  try {
+    if (Object.keys(customThemeOverrides).length) {
+      localStorage.setItem(customThemeStorageKey, JSON.stringify(customThemeOverrides));
+    } else {
+      localStorage.removeItem(customThemeStorageKey);
+    }
+    return true;
+  } catch (error) {
+    console.warn(error);
+    return false;
+  }
+}
+
+function saveCustomThemeColor(key, value) {
+  if (!themePaletteFields[key]) return;
+  const normalized = normalizeThemeColor(value);
+  if (!normalized) {
+    setText('theme-custom-status', 'Choose a valid six-digit color.');
+    return;
+  }
+  customThemeOverrides = { ...customThemeOverrides, [key]: normalized };
+  const saved = persistCustomTheme();
+  applyCustomThemeOverrides();
+  syncCorePalette();
+  syncThemeSetting();
+  sync();
+  if (!saved) setText('theme-custom-status', 'Color changed for this session but could not be saved locally.');
+}
+
+function resetCustomTheme() {
+  customThemeOverrides = {};
+  const saved = persistCustomTheme();
+  applyCustomThemeOverrides();
+  syncCorePalette();
+  syncThemeSetting();
+  sync();
+  if (!saved) setText('theme-custom-status', 'Preset restored for this session but could not be saved locally.');
 }
 
 function saveClockLocale(value) {
@@ -3555,6 +3786,12 @@ $('#response-language-setting')?.addEventListener('change', (event) => {
 $('#theme-setting')?.addEventListener('change', (event) => {
   applyTheme(event.currentTarget.value);
 });
+$$('[data-theme-color]').forEach((control) => {
+  control.addEventListener('input', (event) => {
+    saveCustomThemeColor(event.currentTarget.dataset.themeColor, event.currentTarget.value);
+  });
+});
+$('#theme-reset-custom')?.addEventListener('click', () => resetCustomTheme());
 $('#panel-idle-setting')?.addEventListener('change', (event) => {
   savePanelIdleSeconds(event.currentTarget.value);
 });

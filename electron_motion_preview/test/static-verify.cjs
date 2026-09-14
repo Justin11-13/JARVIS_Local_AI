@@ -147,6 +147,13 @@ assert.match(html, /value="cyan">Cyan Circuit/);
 assert.match(html, /value="violet">Violet Pulse/);
 assert.match(html, /value="matrix">Matrix Green/);
 assert.match(html, /id="theme-status"[^>]*role="status"/);
+assert.match(html, /id="theme-reset-custom"[^>]*>Reset custom<\/button>/);
+assert.equal((html.match(/data-theme-color=/g) || []).length, 8, 'Theme should expose eight custom color controls');
+assert.match(html, /id="theme-color-background"[^>]*type="color"/);
+assert.match(html, /id="theme-color-border"[^>]*type="color"/);
+assert.match(html, /id="theme-color-text"[^>]*type="color"/);
+assert.match(html, /id="theme-color-core-a"[^>]*type="color"/);
+assert.match(html, /id="theme-custom-status"[^>]*role="status"/);
 const settingsStart = html.indexOf('<section id="view-settings"');
 const memoryViewStart = html.indexOf('<section id="view-memory"');
 const knowledgeViewStart = html.indexOf('<section id="view-knowledge"');
@@ -580,6 +587,8 @@ assert.match(unified, /autoSpeechBehavior\.create/);
 assert.match(unified, /window\.JarvisResponseStream/);
 assert.match(unified, /new responseStreamBehavior\.StreamProjector/);
 assert.match(unified, /new responseStreamBehavior\.SpeechChunker/);
+assert.match(responseStream, /hasPendingText\(\)/);
+assert.match(unified, /hasBufferedSpeech/);
 assert.match(responseStream, /function detectSpeechLanguage\(/);
 assert.match(responseStream, /function selectSpeechVoiceForText\(/);
 assert.match(unified, /function automaticSpeechVoiceForText\(/);
@@ -617,6 +626,12 @@ const responseFunction = unified.match(/function renderChatResponse\(response, t
 assert.ok(responseFunction, 'chat response renderer should remain explicit');
 assert.ok(responseFunction[0].indexOf('autoSpeech.enqueue') < responseFunction[0].indexOf('updateTurnAssistant'), 'speech bridge should start before response DOM update');
 assert.match(unified, /themeStorageKey = 'jarvis\.ui\.theme\.v1'/);
+assert.match(unified, /customThemeStorageKey = 'jarvis\.ui\.theme\.custom\.v1'/);
+assert.match(unified, /themePaletteFields = Object\.freeze/);
+assert.match(unified, /function applyCustomThemeOverrides\(\)/);
+assert.match(unified, /function saveCustomThemeColor\(key, value\)/);
+assert.match(unified, /function resetCustomTheme\(\)/);
+assert.match(unified, /data-theme-color/);
 assert.match(unified, /themeLabels = Object\.freeze/);
 assert.match(unified, /memory: \['Memory'/);
 assert.match(unified, /knowledge: \['Knowledge'/);
@@ -903,6 +918,9 @@ assert.match(unifiedCss, /--core-color-b:\s*#ffbf4d/);
 assert.match(unifiedCss, /--core-color-a:\s*#00c8e7/);
 assert.match(unifiedCss, /--core-color-a:\s*#7a3cff/);
 assert.match(unifiedCss, /--core-color-a:\s*#00d978/);
+assert.match(unifiedCss, /\.theme-palette-grid\s*\{/);
+assert.match(unifiedCss, /\.theme-color-control input\[type="color"\]/);
+assert.match(unifiedCss, /\.theme-color-control:focus-within/);
 assert.match(unifiedCss, /\.system-monitor-card\s*\{[\s\S]*position:\s*absolute/);
 assert.match(unifiedCss, /\.system-monitor-card\s*\{[\s\S]*top:\s*calc\(var\(--floating-top\) \+ var\(--chat-height\) \+ var\(--chat-monitor-gap\)\)/);
 assert.match(unifiedCss, /\.system-monitor-card\s*\{[\s\S]*left:\s*var\(--floating-gap\)/);
@@ -978,7 +996,7 @@ console.log(JSON.stringify({
   knowledgeConnection: 'explicit-register-disconnect-reconnect',
   settings: 'local-date-panel-auto-close-auto-speech-low-motion-and-runtime-lifecycle',
   automaticAiCheck: 'managed-handshake-on-core-ready-no-inference',
-  themePresets: 'amber-cyan-violet-matrix',
+  themePresets: 'amber-cyan-violet-matrix-custom-overrides',
   speechTiming: 'streaming-text-chunked-tts-current-next',
   automaticSpeech: 'opt-in-selected-windows-system-voice-no-manual-buttons',
   speechVoicePackages: 'runtime-listed-windows-onecore-voices-with-explicit-preview',

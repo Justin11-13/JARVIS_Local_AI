@@ -1,5 +1,9 @@
 # Changelog / 改动时间线
 
+## 2026-09-14 — Electron Custom Theme Palette (IMPLEMENTED — source/static/Node verified; package handoff pending)
+
+两套 Electron edition 的 Theme page 新增本地调色盘，用户可即时调整 background、surface、border、accent、text、muted、Core A 与 Core B，颜色经过白名单与 `#RRGGBB` 校验后保存到 edition-local storage，并可 Reset 回四个既有 preset。CSS token 与 hologram Core palette 继续通过既有 renderer contract 同步；未改变 Core/API、bridge、权限或 package dependency。两套 static verifier、Node suite 均通过 `59/59`，`unified.js` syntax check 通过；正常 Electron visual 与安装包重打包交由 release handoff。详情见 [Electron Custom Theme Palette](prompts/feature/20260914-FEAT-electron-custom-theme-palette.md)。
+
 ## 2026-09-14 — Internal Test README and Phase Scope (IMPLEMENTED)
 
 根目录 README 已改为中英双语，并以内测版 Electron + packaged Core 为主要入口；补齐 Windows 安装、Managed ChatGPT、Direct API、可选 Obsidian、源码构建、安全边界和真实限制，同时将未来方向按权威 Target Architecture 的 Phase A-C 分开标为计划；Phase D 继续明确为未授权。此次仅修改文档，不改变运行时。详情见 [Internal Test README and Phase Scope](prompts/documentation/20260914-DOCS-internal-test-readme-and-phases.md)。

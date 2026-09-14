@@ -141,6 +141,10 @@
       return this._drain(true);
     }
 
+    hasPendingText() {
+      return Boolean(this.buffer.trim());
+    }
+
     _drain(force) {
       const chunks = [];
       while (this.buffer) {

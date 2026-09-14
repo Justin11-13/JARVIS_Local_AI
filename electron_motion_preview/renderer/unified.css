@@ -1230,6 +1230,17 @@ summary:focus-visible {
   #ai-connection-status { margin-top: 18px; padding-top: 1px; line-height: 1.6; }
   #view-connections .connection-actions + .settings-status + small { display: block; margin-top: 14px; line-height: 1.55; }
 .settings-note { margin-top: 14px; }
+.theme-customizer { margin-top: 16px; }
+.theme-customizer-head { align-items: flex-start; }
+.theme-customizer-head .button { flex: 0 0 auto; padding: 8px 10px; font-size: 11px; }
+.theme-palette-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 15px; }
+.theme-color-control { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; min-width: 0; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--button-bg); color: var(--muted); padding: 8px 9px; font: 10px var(--mono); }
+.theme-color-control span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.theme-color-control input[type="color"] { width: 32px; height: 28px; border: 1px solid var(--select-border); border-radius: 6px; background: transparent; padding: 2px; cursor: pointer; }
+.theme-color-control input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+.theme-color-control input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 3px; }
+.theme-color-control output { color: var(--readout); font: 9px var(--mono); letter-spacing: .04em; }
+.theme-color-control:focus-within { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(var(--accent-rgb), .12); }
 
 .modal { position: fixed; inset: 0; z-index: 20; display: none; place-items: center; background: #000b; }
 .modal.open { display: grid; }
@@ -1266,6 +1277,9 @@ summary:focus-visible {
   .usage-head-actions { width: 100%; justify-content: space-between; }
   .voice-actions { width: 100%; }
   .voice-actions .button { flex: 1 1 0; min-width: 0; }
+  .theme-customizer-head { flex-direction: column; }
+  .theme-customizer-head .button { width: 100%; }
+  .theme-palette-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 860px) {
