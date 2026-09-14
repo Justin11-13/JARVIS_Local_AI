@@ -1,893 +1,304 @@
-# JARVIS Local AI Assistant
+# JARVIS — Local-first Windows AI Assistant / 本地优先的 Windows AI 助手
 
-JARVIS is a local-first Windows assistant foundation. This candidate branch
-combines a Python Core, a loopback FastAPI service, the New Electron desktop
-client, a Legacy Flutter compatibility client, guarded Windows tools, project
-inspection, live telemetry, optional Obsidian/RAG knowledge, and explicit AI
-transport boundaries.
+JARVIS is an open-source Windows personal AI assistant. It keeps intelligence, control, execution, personal data, and structured knowledge under separate authorities.
 
-The New Electron UI is the primary desktop direction and the Legacy Flutter
-client remains available as a compatibility entrypoint. The Electron renderer
-does not own routing, permissions, native execution, or AI-provider fallback;
-the Python Core remains authoritative.
-
-The Core owns routing, validation, permissions, confirmation, and tool-result
-truth. A model may propose a bounded operation; it does not receive an
-unrestricted shell, administrator access, or permission to bypass the Core.
-
-> Documentation status: this README is reconciled against candidate branch
-> `codex/electron-source-candidate-20260912`, based on
-> `main@07df06f92c3a90eb2fa2dc2bd42cc76271e7d21f`.
->
-> The reviewed Electron handoff contains 45 source/test files with a separate
-> SHA-256 manifest. One later test-only import correction is included in this
-> candidate with its updated file hash. This branch is still a development
-> candidate: it has not been published as a GitHub release, and
-> managed-account/runtime acceptance is not claimed for every machine.
-
-[New UI preview](#new-electron-ui) ·
-[Installation](#installation) ·
-[Legacy compatibility desktop](#legacy-flutter-compatibility-desktop) ·
-[Security](#security-and-privacy) ·
-[Roadmap](#roadmap) ·
-[Edition profiles](docs/editions.md) ·
-[Desktop guide](desktop_ui/README.md) ·
-[License](LICENSE)
-
-## Status at a glance
-
-| Surface | Status in this checkout | Boundary |
-| --- | --- | --- |
-| Python Core and loopback API | `IMPLEMENTED` | Local service on `127.0.0.1:8765`; API readiness does not prove AI access. |
-| Electron New UI | `CANDIDATE — source and static checks included` | Primary UI direction; normal Core/Luna/confirmation smoke remains environment-bound. |
-| Legacy Flutter Windows UI | `IMPLEMENTED — compatibility path` | Retained for recovery and compatibility; not the primary UI direction. |
-| Gemini BYOK chat | `IMPLEMENTED — optional` | Requires the user's own local Gemini key; no silent provider fallback. |
-| Obsidian and local RAG | `IMPLEMENTED — opt-in` | Vault registration, access labels, local indexing, citations, and confirmation-gated note writes. |
-| Luna managed subscription / Direct API | `CANDIDATE — external prerequisites` | Source supports exact `gpt-5.6-luna`; managed login/model access or a user-entered Direct API key is still required. |
-| ChatGPT UI executor and Codex engineering handoff | `PLANNED` | No automatic handoff is performed by this checkout. |
-| Phase D expansion | `OUT OF SCOPE` | Camera vision, mobile, IoT, smart-home, and physical-environment awareness require explicit authorization. |
-
-## Desktop preview
-
-The **New Electron UI is the primary product direction** and is included in this
-candidate. The screenshots below are still Legacy Flutter examples because no
-Electron screenshot is being invented or presented as a runtime benchmark.
-
-These screenshots are existing Legacy Flutter examples. Telemetry values,
-response times, model labels, and connected-state indicators are examples from
-the captured session, not benchmarks or proof that every fresh clone is
-configured.
-
-### Assistant workspace
-
-![Legacy Flutter Assistant page with a Chinese conversation and live CPU, memory, and NVIDIA GPU monitoring](docs/screenshots/assistant-workspace.png)
-
-### Device dashboard
-
-![Legacy Flutter Device page with CPU, memory, NVIDIA GPU, and local runtime status](docs/screenshots/device-dashboard.png)
-
-The images were captured on Windows on September 3, 2026. They do not contain
-API keys or personal file paths, but they still should not be treated as live
-data for another machine.
-
-## Current features
-
-### New Electron UI — primary direction
-
-The candidate includes `electron_motion_preview/`, its npm lockfile, the fixed
-Core bridge/supervisor, the sandboxed renderer, and the static/Node regression
-tests. It is started by `run-new-ui.ps1`, which launches the Electron shell; the
-main process starts or reuses the local Core on `127.0.0.1:8765` and fails
-explicitly on a non-JARVIS port occupant.
-
-The candidate has source/static evidence, but it is not a universal runtime
-guarantee. Core readiness, managed login, exact model access, quota, speech,
-GPU support, and native confirmation are separate facts.
-
-### Legacy Flutter Windows client — compatibility path
-
-The supported desktop app is under [`desktop_ui/`](desktop_ui/). It provides:
-
-- **Assistant:** bounded chat, native-tool evidence, and one-step confirmation
-  for sensitive power actions.
-- **Tasks:** local conversation/task views for the current application flow;
-  this is not a durable scheduler or a complete job-history service.
-- **Device:** CPU, physical-memory, and optional NVIDIA telemetry with bounded
-  chart history, pause, and refresh intervals.
-- **Settings:** local UI/monitoring settings, optional speech configuration,
-  and Obsidian knowledge controls.
-- **Errors:** session diagnostics with occurrence counts, details, copy, and
-  confirmed clear. UI notices stay compact without hiding console diagnostics.
-
-The visual language is a steel/cyan desktop instrument surface. The composer
-supports Ctrl+Enter, protected IME composition, Shift+Enter newlines, and the
-existing double-Enter send gesture.
-
-### Core and local API
-
-The FastAPI service and terminal CLI reuse the same Core tool registry and
-`services/task_router.py` policy. The current API includes:
-
-- `GET /api/health` — Core and configuration information;
-- `GET /api/telemetry` — CPU, memory, and optional NVIDIA metrics;
-- `POST /api/chat` and `GET /api/chat/history` — bounded conversation flow;
-- `GET /api/system-info` — local system information;
-- `/api/projects/...` — registered-project metadata, Git status, file listing,
-  file reading, search, and explicit registry refresh;
-- `/api/obsidian/...` — vault registration, removal, reindexing, and source
-  opening; and
-- `/api/system-speech...` — local Windows speech settings, speech, and stop.
-
-The API binds to loopback when launched by the supplied scripts. Do not expose
-it to a network without designing and verifying a separate authentication and
-permission boundary.
-
-### Native tools
-
-The Python Core currently contains bounded tools for:
-
-- discovering and opening registered Windows applications;
-- reading system, battery, network, process, and supported NVIDIA status;
-- volume, mute, and selected media controls;
-- opening known folders and selected Windows Settings pages;
-- locking, sleeping, restarting, and shutting down Windows after confirmation;
-- discovering projects under configured roots and opening them in VS Code;
-- reading project metadata, Git status, files, and source searches; and
-- searching/opening Obsidian notes plus confirmation-gated create, append, and
-  exact-text update operations.
-
-Project file tools are read-only. Obsidian note writes are a separate,
-explicitly confirmed path; they do not grant the model general file-write
-access.
-
-### Telemetry
-
-Monitoring reads actual local counters and does not call the language model,
-create a task, or execute an operating-system action.
-
-- CPU and physical-memory readings work without an AI backend.
-- NVIDIA utilization, VRAM, and temperature require a working NVIDIA driver
-  and NVML support; unsupported metrics are shown as unavailable.
-- The default refresh interval is two seconds, with slower intervals and pause.
-- Polling pauses while the Flutter window is minimized, and requests do not
-  overlap.
-
-Telemetry is local and useful, but not free: GPU queries can affect laptop
-power usage. Pause monitoring or choose a slower interval on battery power.
-
-### Projects, Git, and files
-
-Project discovery is restricted to configured roots. Current detection covers
-common Laravel/PHP, Django/Python, Node.js, Maven, Gradle, and Git projects.
-JARVIS can list projects, inspect project metadata, open a project, show Git
-status, list files, read supported text files, and search source code.
-
-Create local project-root configuration from the example file:
-
-```powershell
-if (-not (Test-Path config\project_roots.json)) {
-    Copy-Item config\project_roots.example.json config\project_roots.json
-}
-```
-
-Only directories in `config/project_roots.json` are scanned. Generated
-registries such as `config/apps.json` and `config/projects.json` stay local and
-must not be committed.
-
-### Obsidian and RAG
-
-Obsidian is optional. A vault is excluded by default until the user registers
-it and selects an access policy. The current policy labels are:
-
-- `rag` — eligible note content may be indexed and sent as context to the
-  configured Gemini provider;
-- `local-only` — local search/open operations may use the note, but its body is
-  not sent as model context; and
-- `excluded` — ignore the note for JARVIS retrieval.
-
-JARVIS keeps the vault path and index locally, skips protected folders, and
-returns citations for retrieved notes. Reindexing is explicit from the
-desktop UI/API. A first RAG warm-up may download or initialize the local
-embedding/vector dependencies; it does not make a vault public or grant the
-model arbitrary filesystem access.
-
-### Speech
-
-This baseline supports optional reply speech, not voice input or wake-word
-conversation. Windows system speech uses the selected Windows voice and speed.
-Fish Audio is an optional cloud provider configured through local `.env`
-values; only the selected reply narration is sent to that provider. Speech
-providers do not receive native-tool authority.
-
-## Not available in this snapshot
-
-The following are not guaranteed by a fresh clone without external setup or
-additional acceptance:
-
-- managed ChatGPT subscription transport or access to the exact Luna model;
-- OpenAI Direct API transport without a user-entered key and provider access;
-- a successful normal Electron window on hosts with incompatible GPU/cache/ACL
-  conditions;
-- ChatGPT UI delegation or Codex engineering handoff;
-- Ollama, Qwen, another local model, or a GPT API client;
-- unrestricted shell/PowerShell, administrator access, arbitrary browser
-  control, arbitrary file writing, Git commit, or Git push by the model;
-- microphone input, wake word, STT, barge-in, or voice verification;
-- system tray/background lifecycle controls and a durable scheduler; and
-- autonomous computer control.
-
-The checked-in [ChatGPT UI + Codex implementation plan](docs/chatgpt-codex-implementation-plan.md)
-is a proposed plan, not proof that an executor exists. It must not be used to
-claim a feature is implemented.
-
-## New Electron UI and Legacy Flutter relationship
-
-The two UI directions have different status and entry points:
-
-| UI | Role | Core relationship |
-| --- | --- | --- |
-| Electron New UI | **Primary candidate UI**; source and lockfile are included in this branch. | Consumes the same loopback Core through a fixed main-process bridge; it does not own routing, permissions, tools, or telemetry. |
-| Legacy Flutter | **Compatibility client**; retained for recovery and comparison. | Uses the current Core/API foundation through `desktop_ui/`. |
-
-The Electron candidate is the replacement direction, but a healthy window must
-still be distinguished from Core readiness and AI availability. A UI opening
-successfully is not proof that the Core is ready, a provider is authenticated,
-a model is available, or a request can execute a local action.
-
-The candidate's `electron_motion_preview/` has a sandboxed preload and fixed
-bridge to `127.0.0.1:8765`. Its surface includes Core health, telemetry,
-conversation, projects/Git/files/search, tasks, Obsidian metadata, AI mode,
-and bounded speech operations. Renderer code is not an HTTP client and does
-not receive tool or shell authority.
-
-That active line also contains a proposed Luna foreground path:
-
-- **Managed subscription:** the local Codex App Server, managed ChatGPT login,
-  exact model `gpt-5.6-luna`, and a `:read-only` profile. The account must be
-  signed in and must actually expose that model.
-- **Direct API:** the exact Luna model through the OpenAI Responses API, with
-  a user-entered OpenAI API key held only in the Core process. Normal provider
-  billing, quota, account, and model-access limits apply.
-- **No silent fallback:** a failed managed transport, missing model, failed
-  login, missing key, quota error, or network error is reported explicitly;
-  JARVIS does not silently switch to Gemini, another model, or another mode.
-- **No model execution authority:** Luna text transport does not receive
-  shell, browser, filesystem, MCP, plugin, or native-tool authority. Existing
-  native intents remain on the Core permission/confirmation path.
-
-The candidate records contain source/static tests and some ordinary-user
-runtime evidence, but several real-window, audio, Core-startup, and
-managed-account acceptance rows remain environment-bound or pending. They are
-not a universal release claim.
-
-### Target architecture reference
-
-The active coordination line maintains the canonical target at the relative
-path `docs/architecture/TARGET_ARCHITECTURE.md`. That file is not present in
-this clean baseline, so this README intentionally does not link to it as if a
-fresh clone could open it. The checked-in implementation plan above is the
-available roadmap artifact; neither it nor this README replaces the canonical
-Target document.
-
-## Requirements
-
-### Required for the New Electron candidate
-
-- Windows with PowerShell.
-- CPython 3.12.x or newer with `venv` and `pip`.
-- Node.js `>=22.12.0` and npm.
-- Git for cloning and source inspection.
-- A managed Codex installation (`codex.cmd`) and a signed-in account with
-  access to exact `gpt-5.6-luna` only if managed AI chat is required. The UI can
-  open without this external account, but AI status will remain unavailable.
-
-The candidate's `setup.ps1` creates `.venv`, installs the captured
-`requirements.lock.txt`, runs `npm ci` in `electron_motion_preview/`, and can
-run the static/Node checks. It never writes credentials or starts an AI turn.
-
-### Required for the Legacy Flutter compatibility build
-
-- Windows with PowerShell. Windows 11 is the current development environment;
-  this repository does not declare a minimum Windows version.
-- Git for cloning and source inspection.
-- A CPython installation with `venv` and `pip`. The candidate includes a
-  Python lock captured with Python 3.12.14; verify the interpreter with
-  `python --version` before creating `.venv`.
-- Flutter Windows tooling. `desktop_ui/pubspec.yaml` requires Dart `^3.12.2`.
-  The current development environment used Flutter 3.44.9 / Dart 3.12.2;
-  that is an observed toolchain, not a fabricated minimum.
-- Visual Studio with **Desktop development with C++** for Windows Flutter
-  builds.
-- Windows Developer Mode when Flutter plugin symlinks are required during a
-  build. It is not needed merely to run an already-built Release app.
-
-The compatibility `run-desktop.ps1` currently contains a default Flutter path for
-the original development machine. If that path does not exist on your PC,
-edit the script's `$Flutter` value to your own `flutter.bat` before building.
-The commands below do not depend on a personal absolute path.
-
-### Python packages
-
-`requirements.txt` is the human-maintained top-level dependency declaration.
-For this candidate, `setup.ps1` installs the captured versions from
-`requirements.lock.txt`:
+JARVIS 是一个开源的 Windows 个人 AI 助手。它把智能、控制、执行、个人数据和结构化知识交给不同的权威模块负责。
 
 ```text
-fastapi
-pydantic
-python-dotenv
-uvicorn[standard]
-psutil
-nvidia-ml-py==13.610.43
-chromadb==1.5.9
-sentence-transformers==6.0.1
-watchfiles==1.2.0
+Luna / selected AI = Intelligence / 智能
+JARVIS Core         = Policy and control / 策略与控制
+Python Tools        = Bounded execution / 有界执行
+Local storage       = Personal and operational data / 个人与运行数据
+Obsidian            = Optional structured knowledge / 可选结构化知识
+Codex               = Authorized engineering escalation / 授权后的工程升级路径
 ```
 
-The unpinned packages follow the resolver selected by your environment. The
-first RAG initialization can be heavier than the Core-only startup because it
-uses the pinned Chroma and sentence-transformers dependencies.
+The current public-facing milestone is **JARVIS Internal Test**. It packages the Electron desktop, local Python Core, and Windows Codex App Server transport into one installer. Unfinished product pages are excluded.
 
-### Optional current integrations
+当前面向测试者的里程碑是 **JARVIS 内测版**。它把 Electron 桌面端、本地 Python Core 和 Windows Codex App Server transport 封装进同一个安装器，并排除尚未完成的产品页面。
 
-- **Gemini BYOK:** a Google AI Studio/Gemini API key in local `.env`.
-- **Fish Audio:** a Fish Audio key and, if needed, an authorized reference
-  voice ID in local `.env`.
-- **NVIDIA telemetry:** an installed NVIDIA driver/NVML-capable environment;
-  CPU and memory monitoring continue without it.
-- **Obsidian:** a local vault that the user explicitly registers in Settings.
+> **Internal test status / 内测状态：** Package and packaged runtime verification passed on the development Windows host. Installation under a separate clean Windows account is still pending. The installer is unsigned, so Windows may show a SmartScreen warning. / 安装包及其运行时已在开发机通过验证，但尚未在独立的干净 Windows 账户完成安装验收。安装器目前未签名，因此 Windows 可能显示 SmartScreen 提示。
 
-### AI/account prerequisites
+[安装 Install](#install--安装内测版) · [功能 Features](#current-features--当前功能) · [AI 连接](#ai-connections--ai-连接) · [Obsidian](#obsidian-optional--可选-obsidian) · [未来范围](#future-scope--未来范围) · [安全](#security-boundary--安全边界)
 
-The Electron source and lockfile are included in this candidate:
+## Desktop Preview / 桌面预览
 
-- The active Electron lockfile resolves Electron `39.8.10` and
-  `@electron/packager` `19.1.1`; its package metadata requires Node `>=22.12.0`.
-- The managed Luna path requires a local Codex installation, a managed
-  ChatGPT login, and access to exact `gpt-5.6-luna`; it is not a free/unlimited
-  service guarantee.
-- The Direct API path requires an OpenAI API key, network access, provider
-  billing/quota, and exact model access.
+![JARVIS Assistant workspace](docs/screenshots/assistant-workspace.png)
 
-These account prerequisites are not bundled into the repository and are not
-silently replaced by Gemini or another provider.
+This is a development capture. Hardware values and response times are examples, not benchmarks.
 
-## Installation
+这是开发阶段截图。硬件数值和响应时间仅为当次示例，不代表性能基准。
 
-All commands below are PowerShell commands from a fresh clone. The repository
-remote verified for this checkout is:
+## Editions / 版本
+
+| Edition / 版本 | Purpose / 用途 | Pages / 页面 |
+| --- | --- | --- |
+| **JARVIS Internal Test / 内测版** | Completed user-facing capabilities / 已完成、面向测试者的功能 | Assistant, History, Core, Tool Results, Device, AI Connections, Usage, Settings, Memory, Knowledge, Theme, Voice, Events, Errors |
+| **JARVIS Development / 开发版** | Active development and future-feature validation / 开发中功能与未来能力验证 | 内测页面，加上 Tasks、Working Context、Automation、Codex Handoff 开发表面 |
+
+Both editions share one architecture and one set of Core contracts. Internal Test hides unfinished navigation and also blocks direct access to those development routes.
+
+两个版本共用同一架构和 Core contracts。内测版不仅隐藏未完成入口，也会阻止直接访问对应的开发路由。
+
+## Current Features / 当前功能
+
+### Assistant and Core / 助手与 Core
+
+- Starts or reuses the local Core at `127.0.0.1:8765`. / 启动或复用本机 `127.0.0.1:8765` Core。
+- Reports Core health separately from AI availability. / Core 健康状态与 AI 可用状态分开显示。
+- Supports multi-turn chat and explicit reopening of saved local conversations. / 支持多轮聊天，并允许用户明确打开本地历史对话。
+- Streams supported AI replies and renders a safe Markdown subset. / 支持 AI 流式回复，并安全渲染受限 Markdown。
+- Preserves truthful states including `completed`, `failed`, `awaiting_confirmation`, `denied`, and `session_busy`. / 保留真实状态，不把失败、等待确认或拒绝包装成成功。
+
+### Bounded Windows Tools / 有界 Windows 工具
+
+- Reads system, battery, network, process, audio-device, project, Git, and file information through declared tools. / 通过已声明工具读取系统、电池、网络、进程、音频设备、项目、Git 和文件信息。
+- Supports registered operations such as app launch, volume/media control, brightness, clipboard, wallpaper, window management, and selected keyboard/mouse actions. / 支持打开应用、音量和媒体控制、亮度、剪贴板、壁纸、窗口管理及部分键鼠操作。
+- Requires explicit confirmation for higher-risk operations such as sleep, restart, and shutdown. / 睡眠、重启、关机等高风险操作必须取得明确确认。
+- Keeps execution inside Core policy; AI receives neither unrestricted shell nor administrator authority. / 执行权留在 Core，AI 不获得无限制 Shell 或管理员权限。
+
+### Desktop Experience / 桌面体验
+
+- Animated WebGL JARVIS Core with Amber, Cyan, Violet, and Matrix themes. / WebGL 动态 Core，提供 Amber、Cyan、Violet 和 Matrix 主题。
+- Low motion, background mode, and optional start-on-login. / 支持 Low motion、后台运行和可选开机启动。
+- Live local system information when supported by the machine. / 在设备支持时显示真实本机状态。
+- Separate Tool Results, Events, and Errors surfaces. / Tool Results、Events 和 Errors 分页显示。
+- Windows OneCore voice selection, test playback, and optional automatic reading of new replies. / 可选择 Windows OneCore 语音、试听，并自动朗读新的回复。
+- JARVIS-only token usage when the provider reports real usage. / Provider 提供真实 usage 时，仅显示 JARVIS 自己的 Token 使用量。
+
+### Local Data and Knowledge / 本地数据与知识
+
+- Conversations and task records stay local; unfinished task runs are not silently resumed after restart. / 对话和任务记录保存在本地；重启后不会偷偷恢复未完成任务。
+- Internal Test mutable data is stored under `%LOCALAPPDATA%\JARVIS\InternalTest`. / 内测版可写数据保存在 `%LOCALAPPDATA%\JARVIS\InternalTest`。
+- Obsidian Vaults are optional. Disconnect removes JARVIS access without deleting notes. / Obsidian Vault 为可选连接；断开只取消 JARVIS 访问，不删除笔记。
+- Personal runtime data and structured knowledge remain separate authorities. / 个人运行数据与结构化知识保持不同权威来源。
+
+## Requirements / 系统要求
+
+### Internal Test Users / 内测用户
+
+- Windows 10 or Windows 11, x64.
+- A GPU/driver that supports the Electron WebGL surface. / 支持 Electron WebGL 的显卡和驱动。
+- Internet access when using a cloud AI provider. / 使用云端 AI 时需要网络。
+- Either a ChatGPT account with Codex access, or a personal API key for OpenAI, Gemini, DeepSeek, or a supported OpenAI-compatible endpoint. / 需要具备 Codex 权限的 ChatGPT 账号，或者自备 OpenAI、Gemini、DeepSeek 或受支持 OpenAI-compatible endpoint 的 API Key。
+- Obsidian is optional; the application does not need to be running to register an existing Vault folder. / Obsidian 非必需；注册已有 Vault 文件夹时，Obsidian 应用不必保持运行。
+
+The installer includes the application runtime, Python Core, and Windows x64 Codex CLI transport. Testers do not need Python, Node.js, npm, Flutter, or a separate Codex CLI installation.
+
+安装器已包含应用运行时、Python Core 和 Windows x64 Codex CLI transport。内测用户无需另外安装 Python、Node.js、npm、Flutter 或 Codex CLI。
+
+### Source Development / 源码开发
+
+- Windows 10/11 x64
+- Git
+- Python compatible with repository requirements / 与项目依赖兼容的 Python
+- Node.js and npm
+- PowerShell
+
+Flutter is only required for the legacy desktop client, not the Electron Internal Test edition.
+
+Flutter 仅用于旧版桌面客户端，不是 Electron 内测版的运行要求。
+
+## Install / 安装内测版
+
+Current local installer / 当前本地产物：
 
 ```text
-https://github.com/Justin11-13/JARVIS_Local_AI.git
+electron_motion_preview_internal_test\release\JARVIS-Internal-Test-0.1.0-Setup.exe
 ```
 
-### 1. Clone the candidate branch
+1. Run the Setup executable. / 运行 Setup 安装器。
+2. Choose an installation directory. / 选择安装目录。
+3. Launch **JARVIS 内测版** from Desktop or Start. / 从桌面或开始菜单打开 **JARVIS 内测版**。
+4. Open **Core** and confirm `ready`. / 打开 **Core**，确认状态为 `ready`。
+5. Open **AI Connections** and configure one connection. / 打开 **AI Connections**，配置一种 AI 连接。
+
+A selected model name is not connectivity proof. Send a real, non-fixed message before treating an AI path as verified.
+
+选中模型名称不代表已经连通。必须成功发送一条非固定真实消息，才能把该 AI 路径视为已验证。
+
+The unsigned installer has not completed separate clean-machine acceptance. It is an internal artifact, not a stable release.
+
+当前未签名安装器尚未完成独立干净环境验收，因此属于内测产物，不是稳定发行版。
+
+## AI Connections / AI 连接
+
+JARVIS never bundles the developer's credentials. Every tester uses their own account or API key.
+
+JARVIS 不会打包开发者的凭据。每位测试者必须使用自己的账号或 API Key。
+
+### Managed ChatGPT Subscription / ChatGPT 订阅连接
+
+1. Select **ChatGPT Subscription**. / 选择 **ChatGPT Subscription**。
+2. Start the JARVIS-managed sign-in flow. / 启动由 JARVIS 管理的登录流程。
+3. Complete official browser login with your own account. / 在官方浏览器页面登录自己的账号。
+4. Return and check the reported account/model state. / 返回 JARVIS，检查账号和模型状态。
+5. Send a normal question to verify a real response. / 发送普通问题，验证真实回复。
+
+Disconnect stops JARVIS from using the managed transport. It must not silently sign the user out of unrelated Codex clients.
+
+断开连接只停止 JARVIS 使用该 transport，不应偷偷让用户的其他 Codex 客户端退出登录。
+
+### Direct API / API 直连
+
+1. Select **Direct API**. / 选择 **Direct API**。
+2. Choose OpenAI, Gemini, DeepSeek, or the supported OpenAI-compatible option. / 选择 OpenAI、Gemini、DeepSeek 或受支持的 OpenAI-compatible 选项。
+3. Enter your own endpoint/model details where required and your API key. / 按需要填写 endpoint、model 和自己的 API Key。
+4. Send a normal question to verify provider and model access. / 发送普通问题，验证 Provider 和 Model 权限。
+
+API calls may incur charges. Invalid keys, unavailable models, exhausted quota, and network failures remain explicit. JARVIS does not silently switch provider.
+
+API 请求可能产生费用。无效 Key、模型不可用、额度耗尽和网络失败都会明确显示；JARVIS 不会偷偷切换 Provider。
+
+## Obsidian Optional / 可选 Obsidian
+
+Obsidian is not required for chat, Core health, local tools, settings, or local conversations.
+
+聊天、Core 健康检查、本地工具、设置和本地对话都不依赖 Obsidian。
+
+Safe test / 安全测试步骤：
+
+1. Create a temporary Vault with non-private Markdown notes. / 建立仅含非隐私 Markdown 的临时 Vault。
+2. Open **Knowledge**. / 打开 **Knowledge**。
+3. Enter a Vault name and full folder path. / 输入 Vault 名称和完整文件夹路径。
+4. Connect, refresh, and verify the registered source. / 连接并刷新，确认来源已注册。
+5. Disconnect and confirm the original files still exist. / 断开连接，确认原文件仍然存在。
+6. Restart JARVIS and confirm the disconnected Vault is not accessed automatically. / 重启后确认已断开的 Vault 不会被自动访问。
+
+Registration, indexing, and model retrieval are separate outcomes. A registered path is not proof that a note was indexed or used by AI.
+
+注册、索引和模型检索是三个不同结果。路径注册成功不代表笔记已经建立索引或被 AI 使用。
+
+## Build from Source / 从源码构建
 
 ```powershell
-git clone --branch codex/electron-source-candidate-20260912 --single-branch https://github.com/Justin11-13/JARVIS_Local_AI.git
+git clone https://github.com/Justin11-13/JARVIS_Local_AI.git
 cd JARVIS_Local_AI
-git log -1 --oneline
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+cd electron_motion_preview_internal_test
+npm ci
+npm run verify:static
+npm run package:win
 ```
 
-The branch must be published before this command can work from GitHub. If the
-candidate is later promoted to `main`, clone `main` instead and verify the
-reported commit and candidate records.
+The pipeline builds a PyInstaller `onedir` Core, bundles the pinned Windows Codex CLI transport, and produces an x64 NSIS installer. Generated dependencies and build outputs are not source authority.
 
-### 2. Install the locked Python and Electron dependencies
+该流程会构建 PyInstaller `onedir` Core、打包固定版本的 Windows Codex CLI transport，并生成 x64 NSIS 安装器。生成的依赖和构建产物不是源码权威。
+
+Use `electron_motion_preview --edition=development` for development and `electron_motion_preview_internal_test --edition=internal-test` for Internal Test behavior.
+
+开发版使用 `electron_motion_preview --edition=development`；内测行为使用 `electron_motion_preview_internal_test --edition=internal-test`。
+
+## Verification / 验证
 
 ```powershell
-python --version
-node --version
-.\setup.ps1 -Verify
+cd electron_motion_preview_internal_test
+npm run verify:static
+node --test test\*.cjs
 ```
 
-`setup.ps1 -Verify` runs Python compile checks, `npm run verify:static`, and 34
-Electron Node tests. It does not claim that a real managed account, GPU, audio
-device, or native confirmation window has been accepted. Do not commit `.venv/`,
-`electron_motion_preview/node_modules/`, downloaded model/cache data, or local
-databases.
+Python regression tests are under `tests/`. Static tests do not prove rendered UI or installer behavior; those require real runtime acceptance.
 
-### 3. Configure Gemini BYOK (optional)
+Python 回归测试位于 `tests/`。静态测试不能证明真实 UI 和安装器行为，仍需实际运行验收。
 
-Gemini is optional. The Core and local telemetry can start without it, while
-free-form cloud reasoning needs the user's own key.
+## Known Limitations / 已知限制
 
-```powershell
-if (-not (Test-Path .env)) {
-    Copy-Item .env.example .env
-}
-notepad .env
-```
+- Clean-machine installer acceptance is pending. / 干净电脑安装验收尚未完成。
+- The installer is not code-signed. / 安装器尚未进行代码签名。
+- Operational memory and task storage have not completed the target SQLite migration. / 个人运行记忆与任务存储尚未完成目标 SQLite 迁移。
+- Wake word, microphone STT, Voice Interrupt, full automation, proactive behavior, Screen Awareness, and Codex Handoff are not finished Internal Test capabilities. / 唤醒词、语音输入、语音打断、完整自动化、主动助手、屏幕感知和 Codex Handoff 尚未成为内测完成能力。
+- Obsidian registration exists, but full Knowledge Manager governance and end-to-end RAG acceptance remain future work. / 已有 Obsidian 注册，但完整 Knowledge Manager 治理和端到端 RAG 验收仍属未来工作。
+- Hardware metrics depend on the machine; unsupported values must show unavailable. / 硬件数据取决于设备，不支持的项目必须显示 unavailable。
+- AI availability depends on account access, model availability, quota, provider, and network. / AI 可用性取决于账号权限、模型、额度、Provider 和网络。
 
-Set only the local values you intend to use:
-
-```dotenv
-JARVIS_BRAIN_PROVIDER=gemini
-GEMINI_API_KEY=PASTE_YOUR_OWN_KEY_HERE
-GEMINI_MODEL=gemini-3.5-flash-lite
-GEMINI_ENABLED=true
-```
-
-Never put the key in Git, an issue, a screenshot, a prompt, or a source file.
-Google's current documentation should be checked before distributing a build:
-
-- [Gemini API key guide](https://ai.google.dev/gemini-api/docs/api-key)
-- [Gemini API Additional Terms](https://ai.google.dev/gemini-api/terms)
-
-JARVIS does not silently replace an unsupported provider or model with Gemini.
-An unavailable provider remains unavailable and must be corrected explicitly.
-
-### 4. Configure project roots (optional)
-
-```powershell
-if (-not (Test-Path config\project_roots.json)) {
-    Copy-Item config\project_roots.example.json config\project_roots.json
-}
-notepad config\project_roots.json
-```
-
-Use paths that exist on your own machine. The scanner never treats an
-unregistered directory as a project root.
-
-### 5. Configure optional reply speech
-
-Windows system speech uses the voices installed in **Settings → Time & language
-→ Speech**. It does not require an API key.
-
-For Fish Audio, keep credentials local:
-
-```dotenv
-FISH_API_KEY=PASTE_YOUR_OWN_KEY_HERE
-FISH_REFERENCE_ID=OPTIONAL_AUTHORIZED_VOICE_MODEL_ID
-```
-
-A valid key without provider credits or access may still produce no audio. JARVIS
-does not replace a failed speech provider with browser speech or another hidden
-provider.
-
-## New Electron UI
-
-The New Electron UI is included in this candidate and is the primary desktop
-direction. Its package boundary is:
+## Architecture / 架构
 
 ```text
-electron_motion_preview/package.json
-electron_motion_preview/package-lock.json
+Electron desktop / 桌面端
+      ↓
+FastAPI / JARVIS Core
+      ↓
+Routing · Permission · Task/Tool policy
+      ↓
+Python tools and bounded adapters
+      ↓
+Windows · local storage · Obsidian · selected AI provider
 ```
 
-Run the candidate after setup:
+- Authoritative target / 权威目标：[TARGET_ARCHITECTURE.md](docs/architecture/TARGET_ARCHITECTURE.md)
+- Current implementation / 当前实现：[CURRENT_STATE.md](docs/info/01-project-overview/CURRENT_STATE.md)
+- Engineering rules / 工程规则：[AGENTS.md](AGENTS.md)
 
-```powershell
-.\run-new-ui.ps1 -Edition development
-```
+## Security Boundary / 安全边界
 
-The shared source also exposes an `internal-test` profile. Its current
-renderer-routing difference and the named package/install/uninstall workflow
-are recorded in [`docs/editions.md`](docs/editions.md). The internal profile
-must not be distributed until its Core port, instance ownership, and separate
-user-data directory are verified end to end.
+- API binds to loopback only. / API 只监听本机 loopback。
+- Renderer uses a constrained Electron preload bridge. / Renderer 通过受限 Electron preload bridge 访问能力。
+- Core validates tool names and arguments. / Core 校验工具名称和参数。
+- High-risk actions require confirmation. / 高风险操作需要确认。
+- Package excludes developer `.env`, keys, tokens, personal Vault, conversations, and machine-specific registries. / 安装包不包含开发者 `.env`、Key、Token、私人 Vault、对话或机器专属 registry。
+- Errors remain observable; no silent provider, database, tool, or legacy fallback. / 错误保持可见，不允许静默 Provider、数据库、工具或旧版兜底。
 
-Check the existing desktop shortcut without changing it:
+Use non-sensitive data during testing. This is not a security-certified production release.
 
-```powershell
-.\verify-new-ui-shortcut.ps1
-```
-
-For renderer/WebGL verification without starting the Core:
+测试时请使用非敏感数据。本项目目前不是经过安全认证的生产发行版。
 
-```powershell
-.\run-new-ui.ps1 -Verify
-```
+## Future Scope / 未来范围
 
-Normal startup uses `core-supervisor.cjs` to reuse a ready Core or start the
-project-local `.venv\Scripts\python.exe` on `127.0.0.1:8765`. A non-ready
-service already occupying that port is reported as an explicit failure. The
-Electron shell does not include an installer or a bundled Python/Node runtime.
+The target product covers **Phase A-C only**. These are planned directions, not claims of current implementation.
 
-The current candidate verification is source/static verified, not a universal
-runtime or managed-account acceptance. See [AI and billing boundaries](#ai-and-
-billing-boundaries) before selecting a transport.
+目标产品当前只涵盖 **Phase A-C**。以下是规划方向，不代表已经实现。
 
-### Candidate verification boundary
+### Phase A — Core Foundation / 核心基础
 
-- `npm ci` completed from `electron_motion_preview/package-lock.json`.
-- `npm run verify:static` passed.
-- `node --test test/*.cjs` passed with 34/34 tests.
-- Candidate Python dependency installation and `compileall` passed.
-- The full Python test discovery passed 156/156 after the test-only import correction;
-  the corrected file has a new hash and is recorded separately from the
-  original 45-file handoff fingerprint.
-- A short local Core smoke returned `core.status = ready` from
-  `http://127.0.0.1:8765/api/health`; it also correctly reported AI as
-  `managed_subscription` / `not_checked` without an account check or inference.
-- On the current restricted host, `run-new-ui.ps1 -Verify` reached Electron but
-  failed at the renderer boundary because the GPU child exited with
-  `0xC0000135`, the cache directory was not writable, and Electron returned
-  `ERR_FAILED`. No GPU flag or hidden fallback was added; this remains a
-  machine-specific acceptance gate.
-- Real managed login, model access, native confirmation, audio, and normal
-  Electron/Core smoke remain explicit acceptance steps, not inferred status.
-
-## Legacy Flutter compatibility desktop
-
-The Legacy Flutter client is retained as a compatibility and recovery path,
-not the long-term UI direction.
+- Luna intelligence with explicit provider and connection state. / Luna 智能与明确的 Provider、连接状态。
+- Deterministic Core control and permission enforcement. / 确定性的 Core 控制与权限执行。
+- Bounded Python tools and structured `ToolResult`. / 有界 Python 工具和结构化 `ToolResult`。
+- SQLite personal/operational memory, User Model, and Preferences. / SQLite 个人与运行记忆、User Model 和 Preferences。
+- Optional Obsidian knowledge, Knowledge Manager, RAG, and LLM Wiki. / 可选 Obsidian 知识、Knowledge Manager、RAG 和 LLM Wiki。
+- AI usage, configuration, migration, recovery, testing, and observability foundations. / AI usage、配置、迁移、恢复、测试和可观察性基础。
 
-### Build and run
+### Phase B — Assistant Capabilities / 助手能力
 
-After correcting the `$Flutter` path in `run-desktop.ps1` if necessary:
-
-```powershell
-.\run-desktop.ps1 -BuildOnly -Release
-.\run-desktop.ps1
-```
-
-The script uses a repository-local `.pub-cache/`, runs `flutter pub get
---enforce-lockfile`, and starts the loopback API on `127.0.0.1:8765` only when
-that port is not already listening. The first build downloads Flutter
-packages; later builds reuse the local cache.
+- Persistent Tasks and Automation Engine. / 持久化 Tasks 与 Automation Engine。
+- Scheduled, recurring, conditional, and missed tasks. / 定时、重复、条件和错过任务处理。
+- Wake Word, STT, TTS, and Voice Interrupt. / 唤醒词、STT、TTS 和语音打断。
+- Working Context and privacy-bounded Screen Awareness. / Working Context 和具备隐私边界的 Screen Awareness。
+- Bounded multi-step Agent Runtime as an escalation path, not default routing. / 有界多步骤 Agent Runtime，只作为升级路径而非默认路由。
 
-The current shortcut script creates the **Legacy UI** shortcut only after a
-Release build:
+### Phase C — Proactive Assistant / 主动助手
 
-```powershell
-.\create-desktop-shortcut.ps1
-```
+- Event Bus and event filtering. / Event Bus 与事件过滤。
+- Proactive assistance and smart notifications. / 主动协助和智能通知。
+- Presence Awareness and Error Monitor. / Presence Awareness 与 Error Monitor。
+- User-authorized Codex Handoff. / 必须经用户授权的 Codex Handoff。
 
-The `.lnk` file is a convenience launcher, not a standalone installer. Keep
-the repository, the virtual environment, the Release executable, its DLLs, and
-its `data/` directory together. Do not assume a shortcut created on one PC can
-be copied to another PC.
+### Phase D — Not Authorized / 未授权
 
-### Development mode
+Camera Vision, multi-device support, mobile companion, IoT, smart-home control, and physical-environment awareness are future expansion only. They must not be implemented without explicit user authorization.
 
-For the terminal CLI with Python auto-reload:
+Camera Vision、多设备、手机 Companion、IoT、智能家居和物理环境感知只属于未来扩展。没有用户明确授权时不得实现。
 
-```powershell
-.\dev.ps1
-```
+## Project Principles / 项目原则
 
-For a terminal-only run without auto-reload:
+1. One authority for every important concept. / 每个重要概念只有一个权威来源。
+2. No silent fallback. / 禁止静默兜底。
+3. No legacy compatibility by default. / 默认不保留旧版兼容路径。
+4. Fail explicitly and preserve truthful state. / 明确失败并保持真实状态。
+5. Security fails closed. / 安全验证失败时拒绝执行。
+6. Structured results and observable lifecycle transitions. / 使用结构化结果和可观察状态变化。
+7. High cohesion, low coupling, and one-way dependencies. / 高内聚、低耦合、单向依赖。
+8. Derived indexes are never authoritative. / 派生索引永远不是权威来源。
+9. Every repository change is documented and verified. / 每次 Repository 改动都要记录和验证。
 
-```powershell
-.\.venv\Scripts\python.exe -m app.main
-```
-
-For an explicit local API process:
-
-```powershell
-.\.venv\Scripts\python.exe -m uvicorn app.api:app --host 127.0.0.1 --port 8765
-```
-
-The CLI auto-reload process and the desktop API process are separate. After
-changing Python backend code, stop and restart the API that the desktop is
-actually using.
-
-### Stop and restart safely
-
-- Stop a foreground CLI/API with `Ctrl+C` in the terminal that launched it.
-- Close the Legacy app before rebuilding its Windows executable.
-- A shortcut-owned API is stopped by the launcher when its own window closes;
-  an API that was already running is reused and left alone.
-- Before stopping anything by PID, inspect the listener on `127.0.0.1:8765`
-  and confirm that it is the JARVIS process you started. Do not kill an
-  unrelated process merely because it owns the port.
-
-Check Core readiness without implying AI readiness:
-
-```powershell
-Invoke-RestMethod http://127.0.0.1:8765/api/health | ConvertTo-Json -Depth 8
-```
-
-### Verification
-
-From the repository root:
-
-```powershell
-.\.venv\Scripts\python.exe -m unittest discover -s tests
-.\run-desktop.ps1 -BuildOnly
-```
-
-For Flutter checks, use the same SDK path and repository-local cache as the
-launcher:
-
-```powershell
-$env:PUB_CACHE = Join-Path $PWD ".pub-cache"
-$Flutter = "C:\path\to\flutter\bin\flutter.bat"
-Push-Location desktop_ui
-try {
-    & $Flutter pub get --enforce-lockfile
-    & $Flutter analyze --no-pub
-    & $Flutter test --no-pub
-} finally {
-    Pop-Location
-}
-```
-
-These are verification commands, not a claim that they have passed on every
-machine. The build and test result must be recorded for the exact checkout and
-toolchain used.
-
-## AI and billing boundaries
-
-### Gemini in this baseline
-
-Gemini is a user-configured optional cloud brain. Python validates model tool
-names, arguments, paths, secret boundaries, and permission decisions before a
-native operation runs. Gemini does not receive the `.env` key, an unrestricted
-terminal, or arbitrary file contents.
-
-Cloud providers may process prompts and responses under their own terms. Do not
-send passwords, private keys, confidential source, or personal data unless you
-have deliberately reviewed the provider's current policy and accepted that
-data flow.
-
-### Luna transport in this candidate
-
-The candidate uses two explicit, user-selected transports for the exact model
-`gpt-5.6-luna`:
-
-- managed Codex App Server with managed ChatGPT authentication; or
-- OpenAI Direct API with a user-entered key held only in the Core process.
-
-Neither path is a free/unlimited guarantee, and not every account necessarily
-has access to the exact model. Core health, login/key state, model access,
-quota, and AI availability are separate facts. A UI that opened successfully
-does not prove them.
-
-No transport silently falls back to another model, provider, or mode. The
-Electron shell and Core source are included, but managed login, model access,
-quota, and normal-user smoke are external acceptance requirements.
-
-## Security and privacy
-
-JARVIS is intentionally conservative:
-
-- Python Core policy, not model wording, decides whether an action may run.
-- Sensitive power actions require explicit confirmation.
-- Project paths are restricted to registered roots.
-- Project file tools are read-only and credential-like files/results are
-  filtered before model context is built.
-- Obsidian notes are excluded by default and carry explicit access labels.
-- `.env`, API keys, local registries, RAG indexes, caches, logs, and databases
-  stay out of Git.
-- The loopback API should not be exposed to a LAN or public tunnel without a
-  separately verified authentication and permission design.
-- A model response is not an authorization, and a successful HTTP response is
-  not proof that a requested side effect occurred.
-
-The locked Electron dependency audit currently reports three high-severity
-dependency-node findings for `extract-zip@2.0.1`, reached through the direct
-development dependencies `electron` and `@electron/packager`. npm reports no
-available fix for this advisory range; `npm audit --omit=dev` reports zero
-production findings. The package is used by Electron installation/packaging
-paths, not by the renderer's application code. Re-run the audit before a
-public release, and do not apply an unreviewed `npm audit fix --force`.
-
-The native-tool boundary does not provide arbitrary PowerShell, arbitrary
-shell, arbitrary file deletion/modification, Git commit/push, or
-administrator-level operations to the model.
-
-## Local files and generated data
-
-Keep these machine-local and never commit credentials or generated runtime
-state:
-
-```text
-.env
-.venv/
-.pub-cache/
-desktop_ui/build/
-desktop_ui/.dart_tool/
-tmp/
-data/
-config/apps.json
-config/projects.json
-config/project_roots.json
-config/obsidian_vaults.json
-__pycache__/
-*.pyc
-*.db
-*.sqlite
-*.sqlite3
-```
-
-Use the checked-in example files instead:
-
-```text
-.env.example
-config/apps.example.json
-config/projects.example.json
-config/project_roots.example.json
-```
-
-## Example requests
-
-These examples use the current bounded tool vocabulary; they do not authorize
-actions by themselves.
-
-```text
-打开 Chrome
-```
-
-```text
-我的 CPU 和 RAM 现在用了多少？
-```
-
-```text
-重新扫描我的 project
-```
-
-```text
-检查 FYP 的 Git status
-```
-
-```text
-读取 FYP 的 composer.json
-```
-
-```text
-在 FYP 里面搜索 RoomController
-```
-
-For a high-risk request such as shutting down Windows, the Core must ask for a
-clear confirmation before execution. A model or a README example cannot
-pre-approve it.
-
-## Roadmap
-
-The project is being developed in bounded Phase A–C. The current Legacy baseline
-is a foundation, not the complete target architecture.
-
-### Phase A — Core
-
-Target direction:
-
-- Luna intelligence through an explicitly selected transport;
-- JARVIS Core control, routing, permissions, and Python tools;
-- SQLite operational/personal memory and user preferences;
-- Obsidian, Knowledge Manager, RAG, and LLM Wiki boundaries; and
-- attributable AI usage tracking.
-
-The current checkout has only the parts listed under [Current features](#current-features).
-Target items are not automatically implemented because they appear on a
-roadmap.
-
-### Phase B — Assistant
-
-Planned/targeted work includes tasks and automation, scheduled and missed-task
-policy, wake word, STT, TTS/voice interrupt, working context, and screen
-awareness. Voice input and wake word are not available in this snapshot.
-
-### Phase C — Proactive
-
-After the necessary Core and Assistant foundations are stable, the target is an
-event bus with filtering, proactive assistance, smart notifications, presence
-awareness, error monitoring, and an explicitly authorized Codex handoff.
-
-### Phase D — explicitly out of scope
-
-Camera vision, mobile/multi-device support, IoT, smart-home control, and
-physical-environment awareness are future-only. A general request to
-“continue” or “implement the architecture” does not authorize Phase D.
-
-## Repository structure
-
-```text
-JARVIS_Local_AI/
-├── app/
-│   ├── main.py                 # Core registry and terminal loop
-│   ├── api.py                  # Loopback FastAPI interface
-│   └── desktop_launcher.py     # Legacy desktop/API launcher
-├── desktop_ui/                 # Flutter Windows client and widget tests
-├── config/                     # Example configuration; local copies are ignored
-├── docs/
-│   ├── screenshots/            # README screenshots
-│   └── chatgpt-codex-implementation-plan.md
-├── knowledge/                  # Repository-owned knowledge sources
-├── services/                   # Routing, tasks, telemetry, speech, memory, RAG
-├── skills/                     # Bounded native/project/file/Git tools
-├── electron_motion_preview/    # New Electron candidate and Node tests
-├── config/editions.json         # Shared development/internal-test profile contract
-├── tests/                      # Python regression tests
-├── .env.example
-├── dev.ps1
-├── setup.ps1                   # Candidate clean setup and static checks
-├── run-new-ui.ps1              # Start or verify the New Electron UI
-├── verify-new-ui-shortcut.ps1  # Read-only Electron shortcut ownership check
-├── package-edition.ps1         # Build a named local Windows edition package
-├── install-edition.ps1         # Install one named package and shortcut
-├── uninstall-edition.ps1       # Remove app files, preserving user data
-├── run-desktop.ps1
-├── create-desktop-shortcut.ps1
-├── LICENSE
-├── README.md
-├── requirements.txt
-└── requirements.lock.txt
-```
-
-The lock file captures the Python environment used for this candidate. The
-repository still does not bundle Python, Node.js, Electron, Codex login state,
-model weights, a Vault, or private configuration.
-
-## Troubleshooting
-
-### `python` is not recognized
-
-Install a supported CPython distribution, open a new PowerShell window, and
-rerun `python --version`. This repository does not silently switch to another
-interpreter.
-
-### Flutter SDK not found
-
-The launcher currently has a development-machine default path. Install the
-Flutter Windows SDK, ensure its `flutter.bat` is available, and edit the
-`$Flutter` value in `run-desktop.ps1` to that path. Then rerun `flutter doctor -v`
-and the Release build.
-
-### Flutter plugin or Visual Studio build failure
-
-Confirm Visual Studio's **Desktop development with C++** workload and Windows
-Developer Mode. These are build prerequisites, not Python packages. Do not
-disable security controls or run as administrator merely to hide an unresolved
-toolchain error.
-
-### API is offline or the port is occupied
-
-Check the actual listener and Core health:
-
-```powershell
-Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort 8765 -State Listen
-Invoke-RestMethod http://127.0.0.1:8765/api/health | ConvertTo-Json -Depth 8
-```
-
-If another application owns the port, stop only a confirmed JARVIS process or
-choose a separately designed configuration. Do not kill an unknown process.
-
-### Core is ready but AI is unavailable
-
-`/api/health` being reachable means the local Core is serving. It does not
-prove Gemini is configured, a key is valid, a model is accessible, or a cloud
-request can complete. Check `.env` explicitly; no hidden provider fallback is
-performed.
-
-### NVIDIA metrics show unavailable
-
-CPU and memory do not require NVIDIA. Check the installed driver and NVML
-support. The app should show an explicit unavailable state rather than inventing
-zeroes.
-
-### RAG starts slowly or cannot index
-
-The first RAG initialization may download/load embedding dependencies. Check the
-terminal output, confirm the configured Obsidian path exists, and reindex only
-after reviewing the displayed scope. Do not copy a vault into the repository or
-commit the generated `data/` index.
-
-### The New UI preview is missing
-
-Confirm that `electron_motion_preview/package.json` and
-`electron_motion_preview/package-lock.json` are present, then run
-`.\setup.ps1`. The New UI starts with `.\run-new-ui.ps1`; it does not require
-the Legacy Flutter SDK.
-
-## Contributing
-
-Keep changes narrow and traceable:
-
-1. Read the current implementation and its documented boundary.
-2. Keep routing and permission decisions in the Python Core.
-3. Validate paths, arguments, data scope, and confirmation requirements.
-4. Add focused tests for security-sensitive behavior.
-5. Keep generated files, credentials, local profiles, and runtime logs out of
-   commits.
-6. Record what is implemented, what was actually verified, and what remains
-   blocked or planned.
-
-Do not claim a Target or Preview feature is current merely because a plan,
-mockup, screenshot, or separate dirty worktree describes it.
-
-## License
-
-JARVIS is licensed under the Apache License 2.0. See [`LICENSE`](LICENSE) for
-the complete terms.
+## Contributing / 参与开发
+
+Read [AGENTS.md](AGENTS.md), then [docs/INDEX.md](docs/INDEX.md), relevant current-state documentation, and related change records before editing code.
+
+修改源码前，请依次阅读 [AGENTS.md](AGENTS.md)、[docs/INDEX.md](docs/INDEX.md)、相关当前状态文档和历史改动记录。保持任务范围清晰、记录所有变更、运行相关测试并检查最终 Git diff。
+
+## License / 许可证
+
+JARVIS is licensed under the [Apache License 2.0](LICENSE). Third-party components retain their own licenses and notices.
+
+JARVIS 使用 [Apache License 2.0](LICENSE)。第三方组件继续遵守各自许可证和 notice。
