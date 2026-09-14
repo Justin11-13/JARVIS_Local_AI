@@ -53,6 +53,22 @@ class PermissionManagerTests(unittest.TestCase):
         self.assertEqual(decision.risk, "low")
         self.assertFalse(decision.requires_confirmation)
 
+    def test_user_authored_managed_luna_chat_does_not_need_second_confirmation(self):
+        decision = self.policy.evaluate(
+            ActionRequest("codex_app_server", "generate_response", "Explain this error.", "external_submission")
+        )
+
+        self.assertEqual(decision.risk, "low")
+        self.assertFalse(decision.requires_confirmation)
+
+    def test_user_authored_direct_luna_chat_does_not_need_second_confirmation(self):
+        decision = self.policy.evaluate(
+            ActionRequest("openai_api", "generate_response", "Explain this error.", "external_submission")
+        )
+
+        self.assertEqual(decision.risk, "low")
+        self.assertFalse(decision.requires_confirmation)
+
     def test_power_actions_require_one_confirmation(self):
         for action in ("shutdown_computer", "restart_computer", "sleep_computer"):
             with self.subTest(action=action):

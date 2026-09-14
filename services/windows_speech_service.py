@@ -52,7 +52,9 @@ try {
   ).Invoke($null, @($operation))
   $task.Wait()
   $stream = [System.IO.WindowsRuntimeStreamExtensions]::AsStreamForRead($task.Result)
+  if ($stream.CanSeek) { $stream.Position = 0 }
   $player = [System.Media.SoundPlayer]::new($stream)
+  $player.Load()
   $player.PlaySync()
 } finally {
   if ($player) { $player.Dispose() }

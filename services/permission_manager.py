@@ -52,7 +52,7 @@ class PermissionManager:
     HIGH_RISK_ACTIONS = {
         "delete_file", "admin_command", "shutdown_computer", "restart_computer", "sleep_computer",
     }
-    EXTERNAL_EXECUTORS = {"chatgpt_ui", "codex", "gemini"}
+    EXTERNAL_EXECUTORS = {"chatgpt_ui", "codex", "gemini", "codex_app_server", "openai_api"}
 
     def evaluate(self, request: ActionRequest) -> PermissionDecision:
         if request.executor == "gemini" and request.action == "generate_response":
@@ -61,6 +61,22 @@ class PermissionManager:
                 risk="low",
                 requires_confirmation=False,
                 audit_summary="Allowed user-authored text submission to the configured Gemini provider.",
+            )
+
+        if request.executor == "codex_app_server" and request.action == "generate_response":
+            return PermissionDecision(
+                request=request,
+                risk="low",
+                requires_confirmation=False,
+                audit_summary="Allowed user-authored text submission to the isolated managed Codex App Server.",
+            )
+
+        if request.executor == "openai_api" and request.action == "generate_response":
+            return PermissionDecision(
+                request=request,
+                risk="low",
+                requires_confirmation=False,
+                audit_summary="Allowed user-authored text submission to the explicitly selected OpenAI Direct API.",
             )
 
         if request.executor in self.EXTERNAL_EXECUTORS:

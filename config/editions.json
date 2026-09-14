@@ -1,0 +1,31 @@
+{
+  "default": "development",
+  "editions": {
+    "development": {
+      "id": "development",
+      "displayName": "JARVIS Development",
+      "packageName": "JARVIS-Development",
+      "executableName": "JARVIS-Development",
+      "shortcutName": "JARVIS Development",
+      "installDirectoryName": "Development",
+      "userDataDirectoryName": "Development",
+      "coreHost": "127.0.0.1",
+      "corePort": 8765,
+      "coreInstanceId": "jarvis-development",
+      "pagePolicy": "all"
+    },
+    "internal-test": {
+      "id": "internal-test",
+      "displayName": "JARVIS Internal Test",
+      "packageName": "JARVIS-Internal-Test",
+      "executableName": "JARVIS-Internal-Test",
+      "shortcutName": "JARVIS Internal Test",
+      "installDirectoryName": "Internal-Test",
+      "userDataDirectoryName": "InternalTest",
+      "coreHost": "127.0.0.1",
+      "corePort": 8766,
+      "coreInstanceId": "jarvis-internal-test",
+      "pagePolicy": "accepted-only"
+    }
+  }
+}

@@ -34,7 +34,7 @@ class TaskRouter:
         required_count = max(1, decision.confirmation_count)
         confirmation_message = "此操作需要确认。是否继续？请回复 yes 或 no。"
         return {
-            "success": True,
+            "success": None,
             "status": "awaiting_confirmation",
             "risk": decision.risk,
             "action": decision.request.action,
@@ -53,13 +53,25 @@ class TaskRouter:
         function_to_call: Callable,
         arguments: dict,
     ) -> dict:
+        managed_task = self.task_manager.create_task(
+            title=decision.request.purpose[:80],
+            agent=decision.request.executor,
+        )
+        self.task_manager.wait_for_approval_task(managed_task.id)
         self.pending_action_request = {
             "request": decision.request,
+            "task_id": managed_task.id,
             "risk": decision.risk,
             "confirmations_remaining": max(1, decision.confirmation_count),
-            "execute": lambda: self._execute_native_function(function_to_call, arguments),
+            "execute": lambda: self._execute_confirmed_native_action(
+                managed_task.id,
+                function_to_call,
+                arguments,
+                decision.request.action,
+            ),
         }
         response = self._confirmation_response(decision)
+        response["task"] = self.task_manager.get_task(managed_task.id)
         if decision.request.action in {"create_obsidian_note", "append_obsidian_note", "update_obsidian_note"}:
             preview = str(arguments.get("content") or arguments.get("replacement_text") or "")
             response["submission_preview"] = preview[:2000]
@@ -85,13 +97,24 @@ class TaskRouter:
             data_scope="external_submission",
         )
         decision = self.permission_manager.evaluate(request)
+        managed_task = self.task_manager.create_task(
+            title=request.purpose[:80],
+            agent=request.executor,
+        )
+        self.task_manager.wait_for_approval_task(managed_task.id)
         self.pending_action_request = {
             "request": request,
+            "task_id": managed_task.id,
             "risk": decision.risk,
             "confirmations_remaining": max(1, decision.confirmation_count),
-            "execute": lambda: self._execute_external_action(request, execute),
+            "execute": lambda: self._execute_external_action(
+                request,
+                execute,
+                task_id=managed_task.id,
+            ),
         }
         response = self._confirmation_response(decision)
+        response["task"] = self.task_manager.get_task(managed_task.id)
         response["submission_preview"] = purpose
         response["message"] = (
             f"这段文字会发送到 {executor.title()} 进行理解；未包含本地文件或系统资料。"
@@ -123,42 +146,168 @@ class TaskRouter:
         self,
         request: ActionRequest,
         execute: Callable[[], dict],
+        task_id: str | None = None,
     ) -> dict:
-        managed_task = self.task_manager.create_task(title=request.purpose[:80], agent=request.executor)
-        self.task_manager.start_task(managed_task.id)
-        result = execute()
-
-        if result.get("success"):
-            self.task_manager.complete_task(managed_task.id, result=result.get("result", ""))
-        else:
-            self.task_manager.fail_task(
-                managed_task.id,
-                error=result.get("error", "External executor failed."),
+        if task_id is None:
+            managed_task = self.task_manager.create_task(
+                title=request.purpose[:80],
+                agent=request.executor,
             )
+            task_id = managed_task.id
 
-        notification = self.notification_service.notify_task_status(
-            status=result.get("status", "failed"),
-            title=request.purpose,
-            result=result.get("result", ""),
-            error=result.get("error", ""),
-        )
-        return {
-            "task": self.task_manager.get_task(managed_task.id),
-            "success": result.get("success", False),
-            "status": result.get("status", "failed"),
-            "result": result.get("result", ""),
-            "error": result.get("error", ""),
+        self.task_manager.start_task(task_id)
+        try:
+            raw_result = execute()
+        except Exception as error:
+            result = {
+                "success": False,
+                "status": "failed",
+                "result": "",
+                "error": f"External executor failed: {error}",
+            }
+        else:
+            result = self._normalize_external_result(raw_result)
+
+        if result["success"] is True and result["status"] == "completed":
+            self.task_manager.complete_task(task_id, result=result["result"])
+        elif result["success"] is None and result["status"] == "awaiting_confirmation":
+            # A model response can be a confirmation request for a native action.
+            # It is neither a completed external action nor an execution failure.
+            self.task_manager.wait_for_approval_task(task_id)
+            if self.pending_action_request:
+                self.pending_action_request["related_task_id"] = task_id
+        else:
+            self.task_manager.fail_task(task_id, error=result["error"])
+
+        notification = ""
+        if result["success"] is not None:
+            notification = self.notification_service.notify_task_status(
+                status=result["status"],
+                title=request.purpose,
+                result=result["result"],
+                error=result["error"],
+            )
+        response = {
+            "task": self.task_manager.get_task(task_id),
+            "success": result["success"],
+            "status": result["status"],
+            "result": result["result"],
+            "error": result["error"],
             "executor": request.executor,
             "tool_calls": result.get("tool_calls", []),
             "notification": notification,
         }
+        # Safe transport diagnostics may cross the application boundary, but
+        # only as bounded metadata. User/model content and credentials remain
+        # owned by their existing result fields.
+        if isinstance(result.get("timings"), dict):
+            response["timings"] = result["timings"]
+        if isinstance(result.get("native_intent_proposal"), dict):
+            # This is a bounded candidate for the application layer to validate
+            # and route.  It is never an execution result or an authority grant.
+            response["native_intent_proposal"] = result["native_intent_proposal"]
+        return response
 
     @staticmethod
-    def _execute_native_function(function_to_call: Callable, arguments: dict):
+    def _normalize_external_result(result: Any) -> dict[str, Any]:
+        if not isinstance(result, dict):
+            return {
+                "success": False,
+                "status": "failed",
+                "result": "",
+                "error": "External executor returned an invalid result.",
+            }
+
+        if result.get("success") is True and result.get("status") == "completed":
+            return {
+                **result,
+                "result": str(result.get("result", "")),
+                "error": str(result.get("error", "")),
+            }
+
+        status = result.get("status")
+        if result.get("success") is None and status == "awaiting_confirmation":
+            return {
+                **result,
+                "success": None,
+                "status": "awaiting_confirmation",
+                "result": str(result.get("result", "")),
+                "error": str(result.get("error", "")),
+            }
+
+        return {
+            **result,
+            "success": False,
+            "status": status if isinstance(status, str) else "failed",
+            "result": str(result.get("result", "")),
+            "error": str(result.get("error") or "External executor failed."),
+        }
+
+    @staticmethod
+    def _execute_native_function(
+        function_name: str,
+        function_to_call: Callable,
+        arguments: dict,
+    ) -> dict[str, Any]:
         try:
-            return function_to_call(**arguments)
+            result = function_to_call(**arguments)
         except Exception as error:
-            return f"Tool execution failed: {error}"
+            return {
+                "tool_name": function_name,
+                "success": False,
+                "status": "failed",
+                "result": "",
+                "error": f"Tool execution failed: {error}",
+            }
+
+        if isinstance(result, dict):
+            if result.get("success") is True and result.get("status") == "completed":
+                return {**result, "tool_name": function_name}
+            return {
+                **result,
+                "tool_name": function_name,
+                "success": False,
+                "status": result.get("status", "failed"),
+                "result": str(result.get("result", "")),
+                "error": str(result.get("error") or "Tool returned a failed result."),
+            }
+
+        if isinstance(result, str):
+            return {
+                "tool_name": function_name,
+                "success": True,
+                "status": "completed",
+                "result": result,
+                "error": "",
+            }
+
+        return {
+            "tool_name": function_name,
+            "success": False,
+            "status": "failed",
+            "result": "",
+            "error": "Tool returned an invalid result.",
+        }
+
+    def _execute_confirmed_native_action(
+        self,
+        task_id: str,
+        function_to_call: Callable,
+        arguments: dict,
+        function_name: str,
+    ) -> dict[str, Any]:
+        self.task_manager.start_task(task_id)
+        result = self._execute_native_function(
+            function_name,
+            function_to_call,
+            arguments,
+        )
+        if result["success"] is True and result["status"] == "completed":
+            self.task_manager.complete_task(task_id, result=result["result"])
+        else:
+            self.task_manager.fail_task(task_id, error=result["error"])
+        result["task"] = self.task_manager.get_task(task_id)
+        return result
 
     def execute_tool(
         self,
@@ -166,6 +315,8 @@ class TaskRouter:
         arguments: dict,
         user_input: str,
         available_tools: dict[str, Callable],
+        *,
+        force_confirmation: bool = False,
     ):
         if function_name == "refresh_project_registry" and not self.user_explicitly_requested_project_scan(user_input):
             return {
@@ -176,7 +327,13 @@ class TaskRouter:
 
         function_to_call = available_tools.get(function_name)
         if not function_to_call:
-            return f"Tool '{function_name}' is not available."
+            return {
+                "tool_name": function_name,
+                "success": False,
+                "status": "failed",
+                "result": "",
+                "error": f"Tool '{function_name}' is not available.",
+            }
 
         decision = self.permission_manager.evaluate(
             ActionRequest(
@@ -185,10 +342,17 @@ class TaskRouter:
                 purpose=user_input.strip() or function_name,
             )
         )
-        if decision.requires_confirmation:
+        # Model proposals remain untrusted: PermissionManager still owns the
+        # risk decision. Low-risk candidates use the normal read-only/explicit
+        # local path; medium/high-risk candidates remain awaiting confirmation.
+        if force_confirmation or decision.requires_confirmation:
             return self._request_native_confirmation(decision, function_to_call, arguments)
 
-        return self._execute_native_function(function_to_call, arguments)
+        return self._execute_native_function(
+            function_name,
+            function_to_call,
+            arguments,
+        )
 
     def handle_pending_confirmation(self, user_input: str) -> tuple[bool, str | None, Any | None]:
         """Apply a yes/no reply to the one action currently awaiting approval."""
@@ -207,10 +371,34 @@ class TaskRouter:
                 return True, "该操作仍需要确认。是否继续？请回复 yes 或 no。", None
             self.pending_action_request = None
             result = pending_request["execute"]()
+            self._settle_related_task(pending_request.get("related_task_id"), result)
             return True, "已确认，正在执行该操作。", result
 
         if normalized_input in no_answers:
+            pending_request = self.pending_action_request
             self.pending_action_request = None
-            return True, "已取消等待确认的操作。", None
+            task_id = pending_request.get("task_id")
+            related_task_id = pending_request.get("related_task_id")
+            for pending_task_id in {task_id, related_task_id} - {None}:
+                self.task_manager.deny_task(pending_task_id)
+            return True, "已取消等待确认的操作。", {
+                "success": False,
+                "status": "denied",
+                "result": "",
+                "error": "User denied the requested action.",
+                "task": self.task_manager.get_task(task_id) if task_id else None,
+            }
 
         return True, "目前有一个操作等待确认。请回复 yes 或 no。", None
+
+    def _settle_related_task(self, task_id: str | None, result: Any) -> None:
+        """Finish the model request that yielded the pending native action."""
+        if not task_id or not isinstance(result, dict):
+            return
+
+        if result.get("success") is True and result.get("status") == "completed":
+            self.task_manager.complete_task(task_id, result=str(result.get("result", "")))
+        elif result.get("status") == "denied":
+            self.task_manager.deny_task(task_id, error=str(result.get("error") or "User denied the requested action."))
+        else:
+            self.task_manager.fail_task(task_id, error=str(result.get("error") or "External executor failed."))

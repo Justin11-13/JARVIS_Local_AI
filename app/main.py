@@ -2,14 +2,16 @@
 
 This module owns the native tool registry and the policy services shared by the
 terminal and loopback API. It intentionally does not start, load, or import a
-local language model. Gemini is an optional BYOK cloud brain; any future Codex
-integration remains policy-controlled.
+local language model. Luna foreground chat is transported through the local
+Codex App Server with managed ChatGPT authentication; execution remains
+policy-controlled in Python.
 """
 
 from pathlib import Path
 
-from services.agents.gemini import GeminiAdapter
-from services.byok_config import load_byok_config
+from services.agents.codex_app_server import CodexAppServerAdapter
+from services.agents.openai_responses import OpenAIResponsesAdapter
+from services.ai_connection import AiConnectionService
 from services.notification_service import NotificationService
 from services.jarvis_memory import JarvisMemory
 from services.task_manager import TaskManager
@@ -40,11 +42,9 @@ from skills.windows import (
 )
 
 
-byok_config = load_byok_config()
-BRAIN_PROVIDER = byok_config.provider
-BRAIN_MODEL = byok_config.model
-gemini = GeminiAdapter()
-BRAIN_STATUS = "unsupported" if byok_config.error else ("configured" if gemini.is_configured() else "not_configured")
+luna = CodexAppServerAdapter()
+direct_luna = OpenAIResponsesAdapter()
+ai_connection = AiConnectionService(subscription=luna, direct_api=direct_luna)
 task_manager = TaskManager()
 notification_service = NotificationService()
 jarvis_memory = JarvisMemory(
@@ -94,13 +94,12 @@ AVAILABLE_TOOLS = {
 }
 
 
-def gemini_not_configured_reply() -> str:
-    """Explain how to enable the optional cloud understanding fallback."""
-    return (
-        "Gemini cloud understanding is not configured. Add a valid local API key, "
-        "select JARVIS_BRAIN_PROVIDER=gemini, choose a supported Gemini model, "
-        "and set GEMINI_ENABLED=true in .env."
-    )
+def ai_unavailable_reply() -> str:
+    """Explain the selected transport failure without switching transports."""
+    snapshot = ai_connection.snapshot()
+    if snapshot.mode == "direct_api" and snapshot.status == "unconfigured":
+        return "Direct API is not configured. Enter an OpenAI API key in Settings, then explicitly test or send a request."
+    return snapshot.detail or "The selected Luna transport is not ready. JARVIS did not switch transports."
 
 
 def display_tool_result(result) -> None:
@@ -149,7 +148,8 @@ def run_jarvis() -> None:
     print()
     print("=" * 60)
     print("JARVIS v0.6")
-    print(f"Reasoning backend: {BRAIN_PROVIDER} ({BRAIN_STATUS})")
+    snapshot = ai_connection.snapshot()
+    print(f"Reasoning backend: {snapshot.mode} ({snapshot.status})")
     print("输入 exit 退出")
     print("=" * 60)
 
@@ -162,7 +162,7 @@ def run_jarvis() -> None:
             break
         if handle_router_confirmation(user_input):
             continue
-        print(f"\nJARVIS > {gemini_not_configured_reply()}")
+        print(f"\nJARVIS > {ai_unavailable_reply()}")
 
 
 if __name__ == "__main__":

@@ -29,3 +29,5 @@ class WindowsSpeechServiceTests(unittest.TestCase):
         )
         self.assertIn("Speech_OneCore\\Settings\\TextToSpeech", script)
         self.assertIn("$settings.Speed", script)
+        self.assertIn("$stream.Position = 0", script)
+        self.assertIn("$player.Load()", script)

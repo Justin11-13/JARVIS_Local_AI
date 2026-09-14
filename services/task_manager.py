@@ -65,6 +65,7 @@ class TaskManager:
         "completed",
         "completed_with_warnings",
         "failed",
+        "denied",
         "cancelled",
     }
 
@@ -102,6 +103,19 @@ class TaskManager:
 
         return task
 
+    def wait_for_approval_task(
+        self,
+        task_id: str,
+    ) -> Optional[Task]:
+        task = self.tasks.get(task_id)
+
+        if not task:
+            return None
+
+        task.status = "waiting_approval"
+
+        return task
+
     def complete_task(
         self,
         task_id: str,
@@ -129,6 +143,22 @@ class TaskManager:
             return None
 
         task.status = "failed"
+        task.error = error
+        task.completed_at = datetime.now()
+
+        return task
+
+    def deny_task(
+        self,
+        task_id: str,
+        error: str = "User denied the requested action.",
+    ) -> Optional[Task]:
+        task = self.tasks.get(task_id)
+
+        if not task:
+            return None
+
+        task.status = "denied"
         task.error = error
         task.completed_at = datetime.now()
 

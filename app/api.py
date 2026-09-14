@@ -7,9 +7,11 @@ cannot turn JARVIS tools into a network service.
 
 from __future__ import annotations
 
+import inspect
 import json
 import re
 from threading import Lock, Timer
+from time import monotonic
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Response
@@ -17,16 +19,18 @@ from pydantic import BaseModel, Field
 
 from app.main import (
     AVAILABLE_TOOLS,
-    BRAIN_MODEL,
-    BRAIN_PROVIDER,
-    BRAIN_STATUS,
-    gemini,
-    gemini_not_configured_reply,
+    ai_connection,
     jarvis_memory,
+    ai_unavailable_reply,
+    luna,
     task_manager,
     task_router,
 )
-from services.native_intent import resolve_native_intent
+from services.native_intent import (
+    parse_native_intent_proposal,
+    resolve_native_intent,
+    should_request_native_intent_proposal,
+)
 from services.rag.knowledge_router import route_knowledge
 from services.rag.source_registry import load_obsidian_vaults, remove_obsidian_vault, save_obsidian_vault
 from services.system_telemetry import read_system_telemetry
@@ -39,6 +43,10 @@ app = FastAPI(
     title="JARVIS Local API",
     version="0.1.0",
 )
+
+# The chat endpoint resolves registered native intents before it delegates a
+# remaining request to the configured reasoning backend.
+ROUTING_MODE = "native_tools_first"
 
 
 # ---------------------------------------------------------------------------
@@ -57,6 +65,14 @@ def initialize_rag_index() -> None:
     warmup = Timer(1.0, _warm_rag_service)
     warmup.daemon = True
     warmup.start()
+
+
+@app.on_event("shutdown")
+def shutdown_ai_transport() -> None:
+    """Release only the JARVIS-owned managed Luna child on Core shutdown."""
+    close = getattr(luna, "close", None)
+    if callable(close):
+        close()
 
 
 _conversation_lock = Lock()
@@ -174,6 +190,28 @@ class ChatRequest(BaseModel):
         min_length=1,
         max_length=12_000,
     )
+    conversation_id: str = Field(
+        default="primary",
+        min_length=1,
+        max_length=64,
+        pattern=r"^(primary|jarvis-[0-9a-f-]{36})$",
+    )
+
+
+class AiModeRequest(BaseModel):
+    mode: str = Field(min_length=1, max_length=40)
+
+
+class DirectApiKeyRequest(BaseModel):
+    # This value is accepted only over loopback and retained in the running
+    # Core process. It is never included in a response, health data, or logs.
+    api_key: str = Field(min_length=1, max_length=500)
+    conversation_id: str = Field(
+        default="primary",
+        min_length=1,
+        max_length=64,
+        pattern=r"^(primary|jarvis-[0-9a-f-]{36})$",
+    )
 
 
 class SpeechRequest(BaseModel):
@@ -239,6 +277,9 @@ def _serialize_tool_result(
             "confirmation_step": result.get(
                 "confirmation_step"
             ),
+            "tool_name": result.get("tool_name"),
+            "proposal_confidence": result.get("proposal_confidence"),
+            "task": result.get("task"),
             "audit_summary": result.get(
                 "audit_summary"
             ),
@@ -251,7 +292,10 @@ def _serialize_tool_result(
         }
 
     return {
-        "result": str(result)
+        "success": False,
+        "status": "failed",
+        "result": "",
+        "error": "Core received an invalid tool result.",
     }
 
 
@@ -259,21 +303,22 @@ def _execute_native_tool(
     function_name: str,
     arguments: dict[str, Any],
     user_input: str,
+    *,
+    force_confirmation: bool = False,
 ) -> dict[str, Any]:
-    result = task_router.execute_tool(
-        function_name=function_name,
-        arguments=arguments,
-        user_input=user_input,
-        available_tools=AVAILABLE_TOOLS,
-    )
+    router_kwargs = {
+        "function_name": function_name,
+        "arguments": arguments,
+        "user_input": user_input,
+        "available_tools": AVAILABLE_TOOLS,
+    }
+    if force_confirmation:
+        router_kwargs["force_confirmation"] = True
+    result = task_router.execute_tool(**router_kwargs)
 
     serialized = _serialize_tool_result(
         result
     )
-
-    if not isinstance(result, dict):
-        serialized["success"] = True
-        serialized["status"] = "completed"
 
     return serialized
 
@@ -443,6 +488,29 @@ GEMINI_LOCAL_TOOL_SCHEMAS = {
 }
 
 
+def _native_intent_catalog() -> list[dict[str, Any]]:
+    """Describe the registered allowlist without exposing implementation data."""
+    catalog: list[dict[str, Any]] = []
+    for function_name, (required, optional) in GEMINI_LOCAL_TOOL_SCHEMAS.items():
+        if function_name not in AVAILABLE_TOOLS:
+            continue
+        function = AVAILABLE_TOOLS[function_name]
+        doc = inspect.getdoc(function) or ""
+        description = next(
+            (line.strip() for line in doc.splitlines() if line.strip()),
+            function_name.replace("_", " "),
+        )
+        catalog.append(
+            {
+                "name": function_name,
+                "description": description[:160],
+                "required_arguments": sorted(required),
+                "optional_arguments": sorted(optional),
+            }
+        )
+    return catalog
+
+
 SENSITIVE_FILE_NAMES = {
     ".env",
     ".env.local",
@@ -477,197 +545,127 @@ SENSITIVE_VALUE_PATTERN = re.compile(
 )
 
 
-def _execute_gemini_safe_tool(
+def _validate_gemini_tool_arguments(
     function_name: str,
     arguments: dict[str, Any],
-    user_input: str,
-) -> dict[str, Any]:
-    """
-    Validate Gemini's local-tool proposal before it reaches
-    the native tool registry.
-    """
-
-    schema = GEMINI_LOCAL_TOOL_SCHEMAS.get(
-        function_name
-    )
-
+    *,
+    source: str = "Gemini",
+) -> tuple[dict[str, str] | None, dict[str, Any] | None]:
+    """Apply the one shared schema/path boundary to model tool candidates."""
+    schema = GEMINI_LOCAL_TOOL_SCHEMAS.get(function_name)
     if schema is None:
-        return {
+        return None, {
             "success": False,
             "status": "routing_blocked",
             "result": "",
-            "error": (
-                "Gemini requested unavailable tool "
-                f"'{function_name}'."
-            ),
+            "error": f"{source} requested unavailable tool '{function_name}'.",
         }
 
-    required_keys, optional_keys = schema
-
-    supplied_keys = set(
-        arguments
-    )
-
-    valid_keys = (
-        required_keys
-        | optional_keys
-    )
-
-    if (
-        not required_keys.issubset(
-            supplied_keys
-        )
-        or not supplied_keys.issubset(
-            valid_keys
-        )
-    ):
-        return {
+    if not isinstance(arguments, dict):
+        return None, {
             "success": False,
             "status": "validation_failed",
             "result": "",
-            "error": (
-                "Gemini supplied invalid arguments "
-                f"for '{function_name}'."
-            ),
+            "error": f"{source} supplied invalid arguments for '{function_name}'.",
+        }
+
+    required_keys, optional_keys = schema
+    supplied_keys = set(arguments)
+    valid_keys = required_keys | optional_keys
+    if not required_keys.issubset(supplied_keys) or not supplied_keys.issubset(valid_keys):
+        return None, {
+            "success": False,
+            "status": "validation_failed",
+            "result": "",
+            "error": f"{source} supplied invalid arguments for '{function_name}'.",
         }
 
     normalized_arguments: dict[str, str] = {}
-
     for key, value in arguments.items():
         maximum_length = (
             12_000
             if key in {"content", "expected_text", "replacement_text"}
             else 500
-            if key in {
-                "relative_path",
-                "keyword",
-            }
+            if key in {"relative_path", "keyword"}
             else 200
         )
-
         if (
-            not isinstance(value, str)
+            not isinstance(key, str)
+            or not key.strip()
+            or not isinstance(value, str)
             or not value.strip()
             or len(value) > maximum_length
         ):
-            return {
+            return None, {
                 "success": False,
                 "status": "validation_failed",
                 "result": "",
-                "error": (
-                    "Gemini supplied an invalid "
-                    f"'{key}' argument."
-                ),
+                "error": f"{source} supplied an invalid '{key}' argument.",
             }
-
-        normalized_arguments[key] = (
-            value.strip()
-        )
+        normalized_arguments[key] = value.strip()
 
     allowed_values = {
         "adjust_volume": {
-            "direction": {
-                "up",
-                "down",
-            },
-            "amount": {
-                "small",
-                "medium",
-                "large",
-            },
+            "direction": {"up", "down"},
+            "amount": {"small", "medium", "large"},
         },
         "media_control": {
-            "action": {
-                "play_pause",
-                "next",
-                "previous",
-                "stop",
-            },
+            "action": {"play_pause", "next", "previous", "stop"},
         },
         "open_known_folder": {
-            "folder": {
-                "desktop",
-                "documents",
-                "downloads",
-                "pictures",
-                "music",
-                "videos",
-            },
+            "folder": {"desktop", "documents", "downloads", "pictures", "music", "videos"},
         },
         "open_windows_setting": {
-            "setting": {
-                "display",
-                "sound",
-                "wifi",
-                "bluetooth",
-                "power",
-                "notifications",
-                "privacy",
-            },
+            "setting": {"display", "sound", "wifi", "bluetooth", "power", "notifications", "privacy"},
         },
     }
-
-    for (
-        key,
-        valid_values,
-    ) in allowed_values.get(
-        function_name,
-        {},
-    ).items():
-        if (
-            key in normalized_arguments
-            and normalized_arguments[
-                key
-            ].lower()
-            not in valid_values
-        ):
-            return {
+    for key, valid_values in allowed_values.get(function_name, {}).items():
+        if key in normalized_arguments and normalized_arguments[key].lower() not in valid_values:
+            return None, {
                 "success": False,
                 "status": "validation_failed",
                 "result": "",
-                "error": (
-                    "Gemini supplied an unsupported "
-                    f"'{key}' value for "
-                    f"'{function_name}'."
-                ),
+                "error": f"{source} supplied an unsupported '{key}' value for '{function_name}'.",
             }
 
-    if (
-        function_name == "adjust_volume"
-        and "amount"
-        not in normalized_arguments
-    ):
-        normalized_arguments[
-            "amount"
-        ] = "medium"
+    if function_name == "adjust_volume" and "amount" not in normalized_arguments:
+        normalized_arguments["amount"] = "medium"
 
-    if (
-        function_name == "read_file"
-        and _is_sensitive_file(
-            normalized_arguments[
-                "relative_path"
-            ]
-        )
-    ):
-        return {
+    if function_name == "read_file" and _is_sensitive_file(normalized_arguments["relative_path"]):
+        return None, {
             "success": False,
             "status": "routing_blocked",
             "result": "",
             "error": (
-                "JARVIS does not send credential "
-                "or secret files to Gemini."
+                "JARVIS does not send credential or secret files to Gemini."
+                if source == "Gemini"
+                else "JARVIS does not send credential or secret files to model transports."
             ),
         }
 
+    return normalized_arguments, None
+
+
+def _execute_gemini_safe_tool(
+    function_name: str,
+    arguments: dict[str, Any],
+    user_input: str,
+) -> dict[str, Any]:
+    """Validate Gemini's local-tool proposal before native execution."""
+    normalized_arguments, validation_error = _validate_gemini_tool_arguments(
+        function_name,
+        arguments,
+        source="Gemini",
+    )
+    if validation_error:
+        return validation_error
+
     result = _execute_native_tool(
         function_name,
-        normalized_arguments,
+        normalized_arguments or {},
         user_input,
     )
-
-    return _redact_gemini_tool_result(
-        result
-    )
+    return _redact_gemini_tool_result(result)
 
 
 def _is_sensitive_file(
@@ -725,15 +723,20 @@ VOICE_MARKER = "[VOICE_EN]"
 
 
 def plain_display_text(value: str) -> str:
-    """Remove Markdown decoration from prose while preserving fenced code."""
+    """Normalize line endings without destroying the display Markdown structure."""
+    return value.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _plain_speech_text(value: str) -> str:
+    """Remove display-only Markdown markers when no dedicated narration exists."""
     parts = value.split("```")
 
     for index in range(0, len(parts), 2):
         prose = parts[index]
         prose = re.sub(r"(?m)^\s*#{1,6}\s+", "", prose)
-        prose = re.sub(r"(?m)^\s*\*\s+", "• ", prose)
-        prose = re.sub(r"\*{2,3}(.+?)\*{2,3}", r"\1", prose)
-        prose = re.sub(r"_{2,3}(.+?)_{2,3}", r"\1", prose)
+        prose = re.sub(r"(?m)^\s*[-+*]\s+", "• ", prose)
+        prose = re.sub(r"\*{1,3}(.+?)\*{1,3}", r"\1", prose)
+        prose = re.sub(r"_{1,3}(.+?)_{1,3}", r"\1", prose)
         parts[index] = prose
 
     return "```".join(parts)
@@ -744,12 +747,12 @@ def split_reply_for_speech(reply: str) -> tuple[str, str]:
     display, separator, narration = reply.partition(VOICE_MARKER)
     if not separator:
         cleaned_reply = plain_display_text(reply.strip())
-        return cleaned_reply, cleaned_reply
+        return cleaned_reply, _plain_speech_text(cleaned_reply)
     if display.lstrip().startswith(DISPLAY_MARKER):
         display = display.lstrip()[len(DISPLAY_MARKER) :]
     cleaned_display = plain_display_text(display.strip())
     cleaned_narration = narration.strip()
-    return cleaned_display, cleaned_narration or cleaned_display
+    return cleaned_display, cleaned_narration or _plain_speech_text(cleaned_display)
 
 
 def _chat_response(
@@ -758,6 +761,7 @@ def _chat_response(
     tool_results: list[dict[str, Any]],
     speech_reply: str | None = None,
     rag_result: dict[str, Any] | None = None,
+    timings: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Return the API response and retain the completed
@@ -778,6 +782,8 @@ def _chat_response(
         "speech": narration,
         "tool_results": tool_results,
     }
+    if isinstance(timings, dict):
+        response["timings"] = timings
     if rag_result:
         response.update({
             "used_rag": bool(rag_result.get("used_rag")),
@@ -785,6 +791,131 @@ def _chat_response(
             "citations": rag_result.get("citations", []),
         })
     return response
+
+
+def _generate_ai_response(
+    user_input: str,
+    conversation_id: str,
+    *,
+    request_native_intent_proposal: bool = False,
+) -> dict[str, Any]:
+    """Keep transport metadata local and optionally request one Luna proposal marker."""
+    managed_subscription = ai_connection.mode == "managed_subscription"
+    if managed_subscription:
+        # The service owns the selected mode; the existing managed adapter owns
+        # its private session protocol and state.
+        adapter_kwargs: dict[str, Any] = {
+            "transport_session": jarvis_memory.transport_session(conversation_id),
+        }
+        if request_native_intent_proposal:
+            adapter_kwargs["intent_catalog"] = _native_intent_catalog()
+        result = luna.generate_response(
+            user_input,
+            **adapter_kwargs,
+        )
+    else:
+        result = ai_connection.generate_response(user_input, transport_session=None)
+
+    if (
+        isinstance(result, dict)
+        and result.get("success") is True
+        and isinstance(result.get("result"), str)
+    ):
+        cleaned_reply, proposal = parse_native_intent_proposal(
+            result["result"],
+            {
+                entry["name"]
+                for entry in _native_intent_catalog()
+                if isinstance(entry, dict) and isinstance(entry.get("name"), str)
+            },
+        )
+        result["result"] = cleaned_reply
+        if request_native_intent_proposal and proposal is not None:
+            result["native_intent_proposal"] = proposal.to_dict()
+    transport_session = result.pop("transport_session", None)
+    transport_timings = result.get("timings")
+    if managed_subscription and result.get("success") is True:
+        if not isinstance(transport_session, dict):
+            failed_result = {
+                "success": False,
+                "status": "session_persistence_failed",
+                "result": "",
+                "error": "Luna completed but did not return a JARVIS-owned transport session mapping.",
+                "tool_calls": [],
+            }
+            if isinstance(transport_timings, dict):
+                failed_result["timings"] = transport_timings
+            return failed_result
+        try:
+            jarvis_memory.remember_transport_session(conversation_id, transport_session)
+        except ValueError:
+            failed_result = {
+                "success": False,
+                "status": "session_persistence_failed",
+                "result": "",
+                "error": "JARVIS could not persist the owned Luna session mapping.",
+                "tool_calls": [],
+            }
+            if isinstance(transport_timings, dict):
+                failed_result["timings"] = transport_timings
+            return failed_result
+    return result
+
+
+def _execute_native_intent_proposal(
+    proposal_data: Any,
+    user_input: str,
+) -> dict[str, Any]:
+    """Validate and queue one Luna candidate through the normal Core boundary."""
+    if not isinstance(proposal_data, dict):
+        return {
+            "success": False,
+            "status": "validation_failed",
+            "result": "",
+            "error": "Luna returned an invalid native-intent proposal; no local action was executed.",
+        }
+
+    function_name = proposal_data.get("function_name")
+    arguments = proposal_data.get("arguments")
+    confidence = proposal_data.get("confidence")
+    try:
+        confidence_value = float(confidence)
+    except (TypeError, ValueError, OverflowError):
+        confidence_value = -1.0
+    if (
+        not isinstance(function_name, str)
+        or not isinstance(arguments, dict)
+        or isinstance(confidence, bool)
+        or not isinstance(confidence, (int, float))
+        or not 0 <= confidence_value <= 1
+        or confidence_value < 0.75
+    ):
+        return {
+            "success": False,
+            "status": "validation_failed",
+            "result": "",
+            "error": "Luna returned an invalid native-intent proposal; no local action was executed.",
+        }
+
+    normalized_arguments, validation_error = _validate_gemini_tool_arguments(
+        function_name,
+        arguments,
+        source="Luna",
+    )
+    if validation_error:
+        # The shared validator intentionally returns no model-supplied values;
+        # only its bounded reason crosses the API boundary.
+        return validation_error
+
+    result = _execute_native_tool(
+        function_name,
+        normalized_arguments or {},
+        user_input,
+    )
+    result.setdefault("tool_name", function_name)
+    if result.get("status") == "awaiting_confirmation":
+        result["proposal_confidence"] = round(confidence_value, 3)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -799,14 +930,76 @@ def health() -> dict[str, Any]:
     """
 
     return {
-        "status": "ready",
-        "brain": BRAIN_PROVIDER,
-        "brain_model": BRAIN_MODEL,
-        "brain_status": BRAIN_STATUS,
+        # Core status is only the local API/control-plane status. It does not
+        # claim that a cloud account, key, model, or quota is usable.
+        "core": {"status": "ready"},
+        "ai": ai_connection.snapshot().to_dict(),
+        "routing_mode": ROUTING_MODE,
         "task_count": len(
             task_manager.list_tasks()
         ),
     }
+
+
+@app.get("/api/tasks")
+def tasks() -> dict[str, Any]:
+    """Return the current in-process task lifecycle records for local inspection."""
+
+    return {"tasks": task_manager.list_tasks()}
+
+
+def _ensure_ai_mode_can_change() -> None:
+    if task_router.pending_action_request is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Resolve the pending JARVIS confirmation before changing AI connection mode.",
+        )
+
+
+@app.post("/api/settings/ai/mode")
+def set_ai_mode(request: AiModeRequest) -> dict[str, Any]:
+    """Select the next explicit AI transport without moving any conversation state."""
+    with _conversation_lock:
+        _ensure_ai_mode_can_change()
+        try:
+            snapshot = ai_connection.select_mode(request.mode)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+    return {"ai": snapshot.to_dict()}
+
+
+@app.post("/api/settings/ai/check")
+def check_ai_connection() -> dict[str, Any]:
+    """Verify the selected AI transport without submitting a user turn.
+
+    Managed subscription mode performs only the existing App Server
+    initialize/account/model/read-only handshake. Direct API mode has no
+    non-inference check in the current adapter and therefore remains explicit
+    about being unverified.
+    """
+    with _conversation_lock:
+        snapshot = ai_connection.check_ready()
+    verification = (
+        "managed_transport"
+        if snapshot.mode == "managed_subscription"
+        else "direct_api_inference_not_run"
+    )
+    return {
+        "ai": snapshot.to_dict(),
+        "verification": verification,
+    }
+
+
+@app.post("/api/settings/ai/direct-api-key")
+def set_direct_api_key(request: DirectApiKeyRequest) -> dict[str, Any]:
+    """Keep a user-entered Direct API key in-memory for this Core lifetime only."""
+    with _conversation_lock:
+        _ensure_ai_mode_can_change()
+        try:
+            snapshot = ai_connection.set_direct_api_key(request.api_key)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+    return {"ai": snapshot.to_dict()}
 
 
 def _reset_rag_runtime() -> None:
@@ -887,6 +1080,12 @@ def system_info() -> dict[str, Any]:
 def chat_history() -> dict[str, Any]:
     """Restore bounded conversation history from local persistent memory."""
     return {"turns": jarvis_memory.history()}
+
+
+@app.post("/api/chat/session")
+def create_chat_session() -> dict[str, str]:
+    """Issue an opaque local conversation key; no App Server thread is created here."""
+    return {"conversation_id": jarvis_memory.create_conversation_id()}
 
 
 @app.get("/api/telemetry")
@@ -1036,9 +1235,7 @@ def chat_with_jarvis(
     request: ChatRequest,
 ) -> dict[str, Any]:
     """
-    Handle local intents, pending confirmations,
-    RAG retrieval, Gemini reasoning, and bounded
-    local-tool proposals.
+    Handle local intents, pending confirmations, and isolated Luna text chat.
     """
 
     user_input = (
@@ -1061,7 +1258,11 @@ def chat_with_jarvis(
             speech_reply=fast_speech_reply(user_input),
         )
 
+    lock_started = monotonic()
     with _conversation_lock:
+        lock_timings = {
+            "lock_wait_ms": round((monotonic() - lock_started) * 1000, 1),
+        }
 
         # ---------------------------------------------------
         # 2. Pending confirmation
@@ -1100,7 +1301,7 @@ def chat_with_jarvis(
                 and pending_result.get(
                     "executor"
                 )
-                == "gemini"
+                    == "codex_app_server"
             ):
                 reply = (
                     pending_result.get(
@@ -1116,6 +1317,7 @@ def chat_with_jarvis(
                 user_input,
                 reply,
                 [result] if result else [],
+                timings=lock_timings,
             )
 
         # ---------------------------------------------------
@@ -1137,126 +1339,93 @@ def chat_with_jarvis(
                 )
             )
 
-            reply = (
-                result.get("result")
-                or result.get("error")
-                or native_intent.description
-            )
+            if result.get("status") == "awaiting_confirmation":
+                # The permission response owns the user-facing confirmation
+                # text. Falling back to the intent description here made the
+                # renderer/speech bridge announce only a short action label
+                # instead of the actual Yes/No prompt.
+                reply = result.get("message") or "此操作需要确认。是否继续？请回复 yes 或 no。"
+            else:
+                reply = (
+                    result.get("result")
+                    or result.get("error")
+                    or native_intent.description
+                )
 
             return _chat_response(
                 user_input,
                 reply,
                 [result],
+                timings=lock_timings,
             )
 
         # ---------------------------------------------------
-        # 4. Gemini availability
+        # 4. Isolated Luna text chat
         # ---------------------------------------------------
 
-        if not gemini.is_configured():
-            return _chat_response(
-                user_input,
-                gemini_not_configured_reply(),
-                [],
-            )
-
-        # ---------------------------------------------------
-        # 5. Knowledge routing + RAG retrieval
-        # ---------------------------------------------------
-
-        knowledge_route = route_knowledge(user_input)
-        if knowledge_route.use_rag:
-            try:
-                rag_result = (
-                    _get_rag_service()
-                    .build_augmented_message(
-                        user_input,
-                        domains=knowledge_route.domains,
-                    )
-                )
-
-            except Exception as error:
-                print(
-                    "[RAG] Retrieval failed; "
-                    f"continuing without RAG: {error}"
-                )
-
-                rag_result = {
-                    "message": user_input,
-                    "used_rag": False,
-                    "sources": [],
-                    "chunks": [],
-                }
-
-        else:
-            rag_result = {
-                "message": user_input,
-                "used_rag": False,
-                "sources": [],
-                "chunks": [],
-            }
-
-        gemini_input = (
-            rag_result["message"]
-            if rag_result["used_rag"]
-            else user_input
+        request_native_intent_proposal = (
+            ai_connection.mode == "managed_subscription"
+            and should_request_native_intent_proposal(user_input)
         )
-
-        # Retrieved knowledge is already the complete context for a RAG answer.
-        # Do not expose unrelated local action tools on this path: some models
-        # otherwise keep proposing system/file tools instead of answering from
-        # the supplied sources, eventually hitting the bounded tool-call guard.
-        gemini_tool_executor = None
-        if not rag_result["used_rag"]:
-            gemini_tool_executor = (
-                lambda function_name, arguments:
-                _execute_gemini_safe_tool(
-                    function_name,
-                    arguments,
-                    user_input,
-                )
-            )
-        
-        # ---------------------------------------------------
-        # 6. Gemini reasoning
-        # ---------------------------------------------------
-
         result = (
             task_router
             .execute_external_action(
-                executor="gemini",
+                executor=ai_connection.executor(),
                 action="generate_response",
                 purpose=user_input,
                 execute=lambda: (
-                    gemini.generate_response(
-                        gemini_input,
-                        execute_tool=gemini_tool_executor,
-                        memory_contents=(
-                            jarvis_memory
-                            .gemini_contents()
-                        ),
+                    _generate_ai_response(
+                        user_input,
+                        request.conversation_id,
+                        request_native_intent_proposal=request_native_intent_proposal,
                     )
                 ),
             )
         )
 
         # ---------------------------------------------------
-        # 7. Final response
+        # 5. Final response
         # ---------------------------------------------------
 
-        reply = (
+        model_reply = (
             result.get("result")
             or result.get("error")
-            or "Gemini returned no response."
+            or ai_unavailable_reply()
         )
+
+        tool_results = [_serialize_tool_result(result)]
+        proposal_result = None
+        if result.get("success") is True and result.get("native_intent_proposal"):
+            proposal_result = _execute_native_intent_proposal(
+                result.get("native_intent_proposal"),
+                user_input,
+            )
+            tool_results.append(_serialize_tool_result(proposal_result))
+            if proposal_result.get("status") == "awaiting_confirmation":
+                reply = (
+                    proposal_result.get("message")
+                    or "此操作需要确认。是否继续？请回复 yes 或 no。"
+                )
+            elif proposal_result.get("success") is True:
+                reply = proposal_result.get("result") or model_reply
+            else:
+                reply = (
+                    proposal_result.get("error")
+                    or "Luna 的本地操作建议未通过 Core 校验，未执行。"
+                )
+        else:
+            reply = model_reply
+
+        adapter_timings = result.get("timings")
+        timings = {
+            **lock_timings,
+            **adapter_timings,
+        } if isinstance(adapter_timings, dict) else lock_timings
 
         return _chat_response(
             user_input,
             reply,
-            [
-                _serialize_tool_result(
-                    result
-                )
-            ],
-            rag_result=rag_result,
+            tool_results,
+            rag_result={"used_rag": False, "sources": [], "chunks": []},
+            timings=timings,
         )

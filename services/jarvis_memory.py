@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 import re
 from threading import Lock
+from uuid import uuid4
 
 
 _SENSITIVE_ASSIGNMENT = re.compile(
@@ -24,6 +25,16 @@ class MemoryTurn:
     assistant: str
     speech: str
     created_at: str
+
+
+@dataclass(frozen=True)
+class TransportSession:
+    """Opaque, JARVIS-owned transport mapping; it never stores credentials."""
+
+    thread_id: str
+    owner: str
+    version: int
+    auth_context_hash: str
 
 
 class JarvisMemory:
@@ -44,6 +55,7 @@ class JarvisMemory:
         self._storage_path = storage_path
         self._context_turns = min(context_turns or max_turns, max_turns)
         self._lock = Lock()
+        self._transport_sessions: dict[str, TransportSession] = {}
         self._load()
 
     @staticmethod
@@ -74,6 +86,28 @@ class JarvisMemory:
                         created_at=str(item.get("created_at", "")),
                     )
                 )
+            sessions = payload.get("transport_sessions", {}) if isinstance(payload, dict) else {}
+            if isinstance(sessions, dict):
+                for conversation_id, item in sessions.items():
+                    if not isinstance(conversation_id, str) or not isinstance(item, dict):
+                        continue
+                    try:
+                        session = TransportSession(
+                            thread_id=str(item["thread_id"]),
+                            owner=str(item["owner"]),
+                            version=int(item["version"]),
+                            auth_context_hash=str(item["auth_context_hash"]),
+                        )
+                    except (KeyError, TypeError, ValueError):
+                        continue
+                    if all(
+                        (
+                            session.thread_id,
+                            session.owner,
+                            session.auth_context_hash,
+                        )
+                    ):
+                        self._transport_sessions[conversation_id] = session
         except (OSError, json.JSONDecodeError) as error:
             print(f"[Memory] Could not load conversation history: {error}")
 
@@ -85,7 +119,14 @@ class JarvisMemory:
         temporary_path = self._storage_path.with_suffix(".tmp")
         temporary_path.write_text(
             json.dumps(
-                {"version": 1, "turns": [asdict(turn) for turn in self._turns]},
+                {
+                    "version": 3,
+                    "turns": [asdict(turn) for turn in self._turns],
+                    "transport_sessions": {
+                        conversation_id: asdict(session)
+                        for conversation_id, session in self._transport_sessions.items()
+                    },
+                },
                 ensure_ascii=False,
                 indent=2,
             ),
@@ -141,6 +182,37 @@ class JarvisMemory:
                 self._save()
             except OSError as error:
                 print(f"[Memory] Could not clear conversation history: {error}")
+
+    def create_conversation_id(self) -> str:
+        """Create a client-safe opaque key for one new JARVIS foreground conversation."""
+        return f"jarvis-{uuid4()}"
+
+    def transport_session(self, conversation_id: str) -> dict[str, str | int] | None:
+        with self._lock:
+            session = self._transport_sessions.get(conversation_id)
+            return asdict(session) if session else None
+
+    def remember_transport_session(self, conversation_id: str, session: dict) -> None:
+        """Persist one adapter-owned mapping without exposing account identity or tokens."""
+        try:
+            parsed = TransportSession(
+                thread_id=str(session["thread_id"]),
+                owner=str(session["owner"]),
+                version=int(session["version"]),
+                auth_context_hash=str(session["auth_context_hash"]),
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError("Invalid JARVIS transport session mapping.") from error
+        if not conversation_id or not all(
+            (parsed.thread_id, parsed.owner, parsed.auth_context_hash)
+        ):
+            raise ValueError("Invalid JARVIS transport session mapping.")
+        with self._lock:
+            self._transport_sessions[conversation_id] = parsed
+            try:
+                self._save()
+            except OSError as error:
+                print(f"[Memory] Could not save transport session: {error}")
 
     def __len__(self) -> int:
         with self._lock:

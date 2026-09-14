@@ -74,6 +74,26 @@ class JarvisMemoryTests(unittest.TestCase):
                 ],
             )
 
+    def test_transport_mapping_survives_core_restart_without_storing_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "conversation.json"
+            first = JarvisMemory(storage_path=path)
+            conversation_id = first.create_conversation_id()
+            first.remember_transport_session(
+                conversation_id,
+                {
+                    "thread_id": "thread-1",
+                    "owner": "jarvis_foreground_luna",
+                    "version": 2,
+                    "auth_context_hash": "a" * 64,
+                },
+            )
+
+            restored = JarvisMemory(storage_path=path)
+
+            self.assertEqual(restored.transport_session(conversation_id)["thread_id"], "thread-1")
+            self.assertNotIn("account-identity", path.read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,546 +1,168 @@
 # JARVIS Local AI Assistant
 
-JARVIS is an open-source, local-first Windows desktop assistant foundation with
-a native Flutter app, a loopback API, policy-controlled local tools, live
-hardware monitoring, and an optional Gemini Bring Your Own Key (BYOK) brain.
+JARVIS is a local-first Windows assistant foundation. This candidate branch
+combines a Python Core, a loopback FastAPI service, the New Electron desktop
+client, a Legacy Flutter compatibility client, guarded Windows tools, project
+inspection, live telemetry, optional Obsidian/RAG knowledge, and explicit AI
+transport boundaries.
 
-Use the Desktop app to watch live CPU, memory, and NVIDIA GPU readings. Its
-local API exposes explicit, safe project/system operations for integrations.
-Once built, launch it from a desktop icon without opening a terminal or
-recompiling the app.
+The New Electron UI is the primary desktop direction and the Legacy Flutter
+client remains available as a compatibility entrypoint. The Electron renderer
+does not own routing, permissions, native execution, or AI-provider fallback;
+the Python Core remains authoritative.
 
-JARVIS does not load a local language model and does not use a GPT API. When a
-user enables Gemini BYOK, Gemini understands the user's text and can propose a
-small, declared set of local tools. Python policy—not an AI prompt alone—still
-validates each tool call and controls confirmation. ChatGPT UI delegation and
-Codex delegation are not implemented yet.
+The Core owns routing, validation, permissions, confirmation, and tool-result
+truth. A model may propose a bounded operation; it does not receive an
+unrestricted shell, administrator access, or permission to bypass the Core.
 
-**Status:** working desktop/API/telemetry foundation, under active development.
-Gemini-backed free-form chat and the current safe local-tool set work when the
-user supplies a local key. Windows and optional Fish Audio reply speech, local
-conversation archives, and background RAG warm-up are implemented. Wake word,
-voice input, a desktop companion, and Codex delegation are not implemented.
+> Documentation status: this README is reconciled against candidate branch
+> `codex/electron-source-candidate-20260912`, based on
+> `main@07df06f92c3a90eb2fa2dc2bd42cc76271e7d21f`.
+>
+> The reviewed Electron handoff contains 45 source/test files with a separate
+> SHA-256 manifest. One later test-only import correction is included in this
+> candidate with its updated file hash. This branch is still a development
+> candidate: it has not been published as a GitHub release, and
+> managed-account/runtime acceptance is not claimed for every machine.
 
-[Screenshots](#desktop-preview) · [Installation](#installation) ·
-[Features](#current-features) · [Security](#security-model) ·
-[Implementation plan](docs/chatgpt-codex-implementation-plan.md) ·
-[Desktop guide](desktop_ui/README.md)
+[New UI preview](#new-electron-ui) ·
+[Installation](#installation) ·
+[Legacy compatibility desktop](#legacy-flutter-compatibility-desktop) ·
+[Security](#security-and-privacy) ·
+[Roadmap](#roadmap) ·
+[Edition profiles](docs/editions.md) ·
+[Desktop guide](desktop_ui/README.md) ·
+[License](LICENSE)
 
-## Desktop Preview
+## Status at a glance
+
+| Surface | Status in this checkout | Boundary |
+| --- | --- | --- |
+| Python Core and loopback API | `IMPLEMENTED` | Local service on `127.0.0.1:8765`; API readiness does not prove AI access. |
+| Electron New UI | `CANDIDATE — source and static checks included` | Primary UI direction; normal Core/Luna/confirmation smoke remains environment-bound. |
+| Legacy Flutter Windows UI | `IMPLEMENTED — compatibility path` | Retained for recovery and compatibility; not the primary UI direction. |
+| Gemini BYOK chat | `IMPLEMENTED — optional` | Requires the user's own local Gemini key; no silent provider fallback. |
+| Obsidian and local RAG | `IMPLEMENTED — opt-in` | Vault registration, access labels, local indexing, citations, and confirmation-gated note writes. |
+| Luna managed subscription / Direct API | `CANDIDATE — external prerequisites` | Source supports exact `gpt-5.6-luna`; managed login/model access or a user-entered Direct API key is still required. |
+| ChatGPT UI executor and Codex engineering handoff | `PLANNED` | No automatic handoff is performed by this checkout. |
+| Phase D expansion | `OUT OF SCOPE` | Camera vision, mobile, IoT, smart-home, and physical-environment awareness require explicit authorization. |
+
+## Desktop preview
+
+The **New Electron UI is the primary product direction** and is included in this
+candidate. The screenshots below are still Legacy Flutter examples because no
+Electron screenshot is being invented or presented as a runtime benchmark.
+
+These screenshots are existing Legacy Flutter examples. Telemetry values,
+response times, model labels, and connected-state indicators are examples from
+the captured session, not benchmarks or proof that every fresh clone is
+configured.
 
 ### Assistant workspace
 
-Chat with JARVIS, review tool results, and keep live system readings alongside
-the conversation. The compact composer grows as you type.
-
-![JARVIS Assistant page with a Chinese conversation and live CPU, memory, and NVIDIA GPU monitoring](docs/screenshots/assistant-workspace.png)
+![Legacy Flutter Assistant page with a Chinese conversation and live CPU, memory, and NVIDIA GPU monitoring](docs/screenshots/assistant-workspace.png)
 
 ### Device dashboard
 
-CPU and memory history, NVIDIA GPU utilization, VRAM, temperature, and local API
-status. Desktop capabilities that are not connected yet are explicitly marked
-**Planned**.
-
-![JARVIS Device page showing CPU and memory charts, NVIDIA GPU readings, and local runtime status](docs/screenshots/device-dashboard.png)
-
-Screenshots captured on Windows on September 3, 2026. Hardware readings and
-response times are examples from that session, not performance benchmarks.
-
----
-
-## Current Features
-
-### Native Windows Desktop
-
-| Page | Available now |
-| --- | --- |
-| Assistant | Gemini-backed chat when BYOK is configured, native tool results, one-step high-risk confirmation, and a system-monitor side panel on wider windows. |
-| Tasks | Requests from the current UI session and locally archived conversations from earlier sessions. |
-| Device | Live CPU, memory, NVIDIA GPU, and local runtime status. |
-| Settings | Session-only appearance and brain/routing information is read-only. |
-| Errors | Session-only diagnostics, occurrence counts, error details, copy, and confirmed clear. |
-
-- Steel/cyan interface with responsive layouts and shared visual components.
-- Desktop shortcut that starts or reuses the local API and opens the Release app.
-- Ctrl+Enter sends; two consecutive Enter presses within 600 ms also send.
-  Shift+Enter inserts a newline, and active IME composition is protected.
-- UI errors use a compact notice and a dedicated Errors page instead of a large
-  red Flutter error panel. Command-line and IDE diagnostics are preserved.
-
-The desktop app uses the same Core tools and routing policy as the CLI. Assistant
-starts as a clean conversation after every restart; up to 100 earlier turns are
-stored locally and shown under Tasks, while only the latest six turns are sent as
-reasoning context. Error reports and UI preferences remain session-only. See the
-[desktop guide](desktop_ui/README.md) for detailed behavior and limits.
-
-### What Works Now / 现在能做什么
-
-- **Desktop monitoring / 桌面监控:** the Device page and Assistant side panel
-  poll the local API for CPU utilisation, physical memory, and supported NVIDIA
-  GPU metrics. This does not need an AI backend.
-- **Local API / 本地 API:** explicit endpoints provide system information,
-  project listing, registered-project Git status, file listing, file reading,
-  file search, and a user-requested project-registry refresh.
-- **Native Python tools / 原生 Python 工具:** the Core contains application
-  discovery/opening, system information, project discovery, Git status, and
-  registered-project read-only file tools. It also supports battery/network/
-  process status, volume and media controls, selected known folders/settings,
-  locking, and power actions. For example, `open_app("Chrome")` finds a Start
-  Menu shortcut and opens it.
-- **Gemini BYOK chat / 自备 Gemini Key:** users can configure one local Gemini
-  API key in `.env`. Gemini can answer general questions in Chinese or English,
-  keep a small bounded conversation context, and request only declared JARVIS
-  tools. It never receives a shell, unrestricted Windows access, or the API key itself.
-  See [Gemini BYOK setup](#gemini-byok-setup) before enabling it.
-- **Chat / 聊天:** exact greetings work locally without an API key. With Gemini
-  enabled, a normal request may call a validated native tool. A high-risk
-  action—locking, sleeping, restarting, or shutting down Windows—stops for one
-  clear `yes`/`no` confirmation before Python executes it.
-- **Desktop startup / 桌面启动:** the provided shortcut starts or reuses the
-  loopback API, opens the Release UI, and stops only the API instance it started
-  when that window closes.
-
-### Not Available Yet / 现在还不能做
-
-- Codex and ChatGPT UI delegation are not configured. A coding request is not
-  silently handed to another provider; JARVIS reports its current limit.
-- No Ollama, Qwen, other local model, GPT API, automatic browser control,
-  unrestricted PowerShell, file-writing chat workflow, or unrestricted
-  autonomous computer control is available.
-
-The intended, not-yet-implemented direction is documented in the bilingual
-[implementation plan](docs/chatgpt-codex-implementation-plan.md).
-
-### Current Chat Boundary / 当前聊天边界
-
-The Assistant composer uses Gemini only after the user deliberately enables
-BYOK. Gemini may suggest one of the declared local tools, but JARVIS validates
-the name and arguments before routing it to Python. It can perform at most
-three local-tool calls per message. Credential-like files are blocked and
-credential-like text is redacted before a tool result can return to Gemini.
-
-This is an assistant boundary, not an unrestricted-agent promise: Gemini does
-not receive a PowerShell terminal, a generic file writer, administrator access,
-or permission to bypass a confirmation.
-
-### Native Application Discovery
-
-JARVIS can automatically discover many installed Windows applications through Start Menu shortcuts.
-
-Current capabilities include:
-
-- Scan Windows Start Menu applications
-- Generate a local application registry
-- Exact application-name matching
-- Partial application-name matching
-- Fuzzy application-name matching
-- Automatically refresh the registry when an application is not found
-
-Examples for an explicit native-tool caller:
-
-```text
-打开 Chrome
-```
-
-```text
-打开 Visual Studio Code
-```
-
-```text
-打开 Spotify
-```
-
-The application registry is generated locally and should not be committed to Git.
-
-### Live System Monitoring
-
-The desktop reads actual system counters through the local API; monitoring
-does not call the language model or create tasks.
-
-- CPU utilization and physical memory usage, with bounded history charts.
-- NVIDIA GPU utilization, used/total VRAM, and temperature through NVML.
-- Updates every 2 seconds by default, with 2 / 5 / 10 second intervals and pause.
-- Polling pauses while the app is minimized; requests do not overlap.
-- Unsupported GPU metrics show N/A. AMD/Intel GPU monitoring is not implemented.
-
-With Gemini BYOK enabled, the chat composer can route a CPU/RAM question to the
-same read-only API. Monitoring is lightweight but not free; pause it or use a
-slower interval on battery power.
-
-Example:
-
-```text
-我的 CPU 和 RAM 现在用了多少？
-```
-
-### Automatic Project Discovery
-
-JARVIS can scan configured development directories and automatically discover software projects.
-
-Project scanning is restricted to configured project roots.
-
-Example local configuration:
-
-```json
-{
-  "roots": [
-    "C:\\Users\\YOUR_USERNAME\\GitHub",
-    "C:\\Users\\YOUR_USERNAME\\Documents\\GitHub"
-  ]
-}
-```
-
-Current framework detection includes:
-
-- Laravel
-- PHP
-- Django
-- Python
-- Node.js
-- Java Maven
-- Java Gradle
-- Git repositories
-
-Example command:
-
-```text
-重新扫描我的 project
-```
-
-### Project Management
-
-Current project capabilities:
-
-- Refresh the project registry
-- List discovered projects
-- Get project information
-- Detect project framework
-- Detect whether a project uses Git
-- Check whether the project path exists
-- Open projects in Visual Studio Code
-
-Example commands:
-
-```text
-我有哪些 project？
-```
-
-```text
-告诉我 FYP 的资料
-```
-
-```text
-打开 FYP
-```
-
-### Git Integration
-
-Current Git capabilities:
-
-- Check Git status
-- Detect the current branch
-- Detect modified files
-- Detect untracked files
-
-Example:
-
-```text
-检查 FYP 的 Git status
-```
-
-### Read-Only Project File Tools
-
-JARVIS currently provides read-only project file access.
-
-It can:
-
-- List project files and folders
-- Read supported text files
-- Search project source code
-- Search keywords
-- Search classes
-- Search functions
-- Search routes
-- Search models
-
-Example commands:
-
-```text
-看看 FYP 根目录有什么文件
-```
-
-```text
-读取 FYP 的 composer.json
-```
-
-```text
-在 FYP 里面搜索 RoomController
-```
-
-### Project Path Protection
-
-Project file tools are restricted to registered project directories.
-
-Requests attempting to escape a registered project directory should be rejected.
-
-Example:
-
-```text
-../../Windows/System32
-```
-
-should not be allowed to expose files outside the registered project.
-
-### Development Auto-Reload
-
-JARVIS includes a development workflow using `watchfiles`.
-
-Run:
-
-```powershell
-.\dev.ps1
-```
-
-During development:
-
-```text
-Modify Python code
-  ↓
-Save file
-  ↓
-watchfiles detects the change
-  ↓
-JARVIS automatically restarts
-  ↓
-Updated code is loaded
-```
-
-This avoids manually restarting JARVIS after every code change.
-
----
-
-## Architecture
-
-The Flutter desktop connects to `app/api.py` on `127.0.0.1:8765`. The FastAPI
-service and terminal CLI reuse the same Core tool registry and
-`services/task_router.py` policy. System telemetry is a separate read-only API
-path and does not enter a reasoning flow.
-
-Core tool flow:
-
-```text
-                         User
-                          │
-                          ▼
-              Codex executor (planned)
-                          │
-                          ▼
-                  Action proposal
-                          │
-                          ▼
-                     Tool Router
-                          │
-        ┌─────────────────┼─────────────────┐
-        ▼                 ▼                 ▼
-     System            Projects            Git
-     Skills             Skills            Skills
-        │                 │                 │
-        └─────────────────┼─────────────────┘
-                          ▼
-                       Files
-                       Skills
-                          │
-                          ▼
-                       Services
-                          │
-             ┌────────────┴────────────┐
-             ▼                         ▼
-       App Registry              Project Registry
-             │                         │
-             ▼                         ▼
-    Windows Start Menu         Configured Scan Roots
-             │                         │
-             ▼                         ▼
-   Installed Applications      Development Projects
-```
-
-The language model decides which registered tool is appropriate.
-
-The JARVIS engine controls what tools actually exist and how those tools execute.
-
----
-
-## Project Structure
-
-```text
-JARVIS_Local_AI/
-├── app/
-│   ├── main.py                 # Core conversation loop and CLI
-│   ├── api.py                  # Loopback API for the desktop
-│   └── desktop_launcher.py     # Windowless Release-app launcher
-│
-├── desktop_ui/                 # Flutter Windows app and widget tests
-├── docs/
-│   └── screenshots/            # README screenshots
-│
-├── config/
-│   ├── apps.example.json
-│   ├── project_roots.example.json
-│   └── projects.example.json
-│
-├── services/
-│   ├── __init__.py
-│   ├── app_registry.py
-│   ├── notification_service.py
-│   ├── project_registry.py
-│   ├── task_manager.py
-│   ├── task_router.py
-│   ├── system_telemetry.py
-│   └── agents/
-│
-├── skills/
-│   ├── files.py
-│   ├── git.py
-│   ├── project.py
-│   └── system.py
-│
-├── tests/
-│
-├── .gitignore
-├── dev.ps1                     # Python CLI auto-reload helper
-├── run-desktop.ps1
-├── create-desktop-shortcut.ps1
-├── LICENSE
-├── README.md
-└── requirements.txt
-```
-
-Generated local configuration files such as `apps.json`, `projects.json`, and `project_roots.json` should remain local.
-
----
-
-## Requirements
-
-For the Windows desktop source build:
-
-- Windows 11 (current development platform)
-- Python 3 with pip
-- Git
-- Flutter SDK; the current build uses Flutter 3.44.9 / Dart 3.12.2
-- Visual Studio with the **Desktop development with C++** workload, not just
-  Visual Studio Code; see [Flutter's Windows setup guide](https://docs.flutter.dev/platform-integration/windows/setup)
-- Windows **Developer Mode** enabled while resolving/building Flutter plugins:
-  **Settings → System → For developers → Developer Mode**
-
-The launch script currently expects Flutter at
-`C:\Flutter-3.44.9\flutter\bin\flutter.bat`. If your SDK lives elsewhere, update
-the `$Flutter` path in [run-desktop.ps1](run-desktop.ps1) before building.
-The Dart SDK constraint is declared in [desktop_ui/pubspec.yaml](desktop_ui/pubspec.yaml).
-
-NVIDIA hardware and a working driver are needed for NVIDIA-specific telemetry,
-not for displaying the desktop shell. Available GPU metrics depend on the device.
-
-Developer Mode is a build-time requirement for Flutter's plugin symlinks. It is
-not required merely to run an already-built JARVIS Release from the desktop
-shortcut. If Flutter reports that NuGet is missing, install it separately with:
-
-```powershell
-winget install Microsoft.NuGet
-```
-
-Windows voices are operating-system components and cannot be installed through
-`requirements.txt`. Add them under **Settings → Time & language → Speech →
-Voices**. JARVIS reads the currently selected Windows voice and speed. Fish Audio
-also cannot be installed by pip: it requires a Fish Audio account, API key,
-available credits, and optionally an authorized reference voice ID.
-
----
-
-## Installation
-
-### 1. Clone the repository
-
-Run these commands in PowerShell. All later commands start from the repository root.
-
-```powershell
-git clone https://github.com/Ongzhenggan/JARVIS_Local_AI.git
-cd JARVIS_Local_AI
-```
-
-### 2. Create the Python environment
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-```
-
-The commands use the virtual environment directly; activation is optional.
-This installs the API, telemetry, local RAG model/runtime, and development
-auto-reload dependencies. The first RAG setup may download the embedding model.
-
-### 3. Configure Gemini BYOK (optional, enables free-form chat)
-
-BYOK means **Bring Your Own Key**: every user keeps their own Gemini key on
-their own computer. The key is not part of this repository and must never be
-committed or pasted into an issue, screenshot, or source file.
-
-1. Open [Google AI Studio API Keys](https://aistudio.google.com/app/apikey),
-   create an API key, and select the Google Cloud project you want it attached
-   to. New AI Studio keys are authorization keys by default; Google documents
-   that they are restricted to the Gemini API and help protect leaked keys.
-2. Make a local `.env` only if one does not already exist:
-
-   ```powershell
-   if (-not (Test-Path .env)) {
-       Copy-Item .env.example .env
-   }
-   ```
-
-3. Open `.env` in an editor and paste the key after `GEMINI_API_KEY=`. Keep the
-   selected provider and model as follows:
-
-   ```dotenv
-   JARVIS_BRAIN_PROVIDER=gemini
-   GEMINI_API_KEY=PASTE_YOUR_OWN_KEY_HERE
-   GEMINI_MODEL=gemini-3.5-flash-lite
-   GEMINI_ENABLED=true
-   ```
-
-4. Restart the JARVIS backend. `GET /api/health` reports the selected `brain`,
-   `brain_model`, and whether it is configured; it never returns the key.
-
-`gemini` is the only supported BYOK provider today. Selecting an unimplemented
-provider, for example `JARVIS_BRAIN_PROVIDER=openai`, deliberately reports
-`unsupported` instead of silently using Gemini. Change `GEMINI_MODEL` only to a
-model available to your own key/project.
-
-Google's free/unpaid Gemini quota is not suitable for secrets: its current
-terms say prompts and responses may be used to improve products and may be
-reviewed by humans. Do not send passwords, private keys, confidential source,
-or personal data through it. JARVIS blocks common secret files and redacts
-common credential patterns, but that is a safety layer—not a guarantee.
-Read Google's current [API key guide](https://ai.google.dev/gemini-api/docs/api-key)
-and [Gemini API Additional Terms](https://ai.google.dev/gemini-api/terms)
-before distributing an app that uses the API.
-
-### 4. Configure reply voice (optional)
-
-Windows system voice works without an API key. Select the Windows voice and
-speed in Windows Speech settings, then select **Windows system voice** in JARVIS.
-
-For Fish Audio, add the following only to your local `.env`:
-
-```dotenv
-FISH_API_KEY=PASTE_YOUR_OWN_KEY_HERE
-FISH_REFERENCE_ID=OPTIONAL_AUTHORIZED_VOICE_MODEL_ID
-```
-
-Select **Fish Audio cloud** in JARVIS Settings. Only reply narration is sent to
-Fish Audio. A valid key without available credits will still produce no audio.
-
-### 5. Configure project scan roots (optional)
-
-For project tools, create a local configuration without replacing an existing one:
+![Legacy Flutter Device page with CPU, memory, NVIDIA GPU, and local runtime status](docs/screenshots/device-dashboard.png)
+
+The images were captured on Windows on September 3, 2026. They do not contain
+API keys or personal file paths, but they still should not be treated as live
+data for another machine.
+
+## Current features
+
+### New Electron UI — primary direction
+
+The candidate includes `electron_motion_preview/`, its npm lockfile, the fixed
+Core bridge/supervisor, the sandboxed renderer, and the static/Node regression
+tests. It is started by `run-new-ui.ps1`, which launches the Electron shell; the
+main process starts or reuses the local Core on `127.0.0.1:8765` and fails
+explicitly on a non-JARVIS port occupant.
+
+The candidate has source/static evidence, but it is not a universal runtime
+guarantee. Core readiness, managed login, exact model access, quota, speech,
+GPU support, and native confirmation are separate facts.
+
+### Legacy Flutter Windows client — compatibility path
+
+The supported desktop app is under [`desktop_ui/`](desktop_ui/). It provides:
+
+- **Assistant:** bounded chat, native-tool evidence, and one-step confirmation
+  for sensitive power actions.
+- **Tasks:** local conversation/task views for the current application flow;
+  this is not a durable scheduler or a complete job-history service.
+- **Device:** CPU, physical-memory, and optional NVIDIA telemetry with bounded
+  chart history, pause, and refresh intervals.
+- **Settings:** local UI/monitoring settings, optional speech configuration,
+  and Obsidian knowledge controls.
+- **Errors:** session diagnostics with occurrence counts, details, copy, and
+  confirmed clear. UI notices stay compact without hiding console diagnostics.
+
+The visual language is a steel/cyan desktop instrument surface. The composer
+supports Ctrl+Enter, protected IME composition, Shift+Enter newlines, and the
+existing double-Enter send gesture.
+
+### Core and local API
+
+The FastAPI service and terminal CLI reuse the same Core tool registry and
+`services/task_router.py` policy. The current API includes:
+
+- `GET /api/health` — Core and configuration information;
+- `GET /api/telemetry` — CPU, memory, and optional NVIDIA metrics;
+- `POST /api/chat` and `GET /api/chat/history` — bounded conversation flow;
+- `GET /api/system-info` — local system information;
+- `/api/projects/...` — registered-project metadata, Git status, file listing,
+  file reading, search, and explicit registry refresh;
+- `/api/obsidian/...` — vault registration, removal, reindexing, and source
+  opening; and
+- `/api/system-speech...` — local Windows speech settings, speech, and stop.
+
+The API binds to loopback when launched by the supplied scripts. Do not expose
+it to a network without designing and verifying a separate authentication and
+permission boundary.
+
+### Native tools
+
+The Python Core currently contains bounded tools for:
+
+- discovering and opening registered Windows applications;
+- reading system, battery, network, process, and supported NVIDIA status;
+- volume, mute, and selected media controls;
+- opening known folders and selected Windows Settings pages;
+- locking, sleeping, restarting, and shutting down Windows after confirmation;
+- discovering projects under configured roots and opening them in VS Code;
+- reading project metadata, Git status, files, and source searches; and
+- searching/opening Obsidian notes plus confirmation-gated create, append, and
+  exact-text update operations.
+
+Project file tools are read-only. Obsidian note writes are a separate,
+explicitly confirmed path; they do not grant the model general file-write
+access.
+
+### Telemetry
+
+Monitoring reads actual local counters and does not call the language model,
+create a task, or execute an operating-system action.
+
+- CPU and physical-memory readings work without an AI backend.
+- NVIDIA utilization, VRAM, and temperature require a working NVIDIA driver
+  and NVML support; unsupported metrics are shown as unavailable.
+- The default refresh interval is two seconds, with slower intervals and pause.
+- Polling pauses while the Flutter window is minimized, and requests do not
+  overlap.
+
+Telemetry is local and useful, but not free: GPU queries can affect laptop
+power usage. Pause monitoring or choose a slower interval on battery power.
+
+### Projects, Git, and files
+
+Project discovery is restricted to configured roots. Current detection covers
+common Laravel/PHP, Django/Python, Node.js, Maven, Gradle, and Git projects.
+JARVIS can list projects, inspect project metadata, open a project, show Git
+status, list files, read supported text files, and search source code.
+
+Create local project-root configuration from the example file:
 
 ```powershell
 if (-not (Test-Path config\project_roots.json)) {
@@ -548,269 +170,521 @@ if (-not (Test-Path config\project_roots.json)) {
 }
 ```
 
-Then edit:
+Only directories in `config/project_roots.json` are scanned. Generated
+registries such as `config/apps.json` and `config/projects.json` stay local and
+must not be committed.
+
+### Obsidian and RAG
+
+Obsidian is optional. A vault is excluded by default until the user registers
+it and selects an access policy. The current policy labels are:
+
+- `rag` — eligible note content may be indexed and sent as context to the
+  configured Gemini provider;
+- `local-only` — local search/open operations may use the note, but its body is
+  not sent as model context; and
+- `excluded` — ignore the note for JARVIS retrieval.
+
+JARVIS keeps the vault path and index locally, skips protected folders, and
+returns citations for retrieved notes. Reindexing is explicit from the
+desktop UI/API. A first RAG warm-up may download or initialize the local
+embedding/vector dependencies; it does not make a vault public or grant the
+model arbitrary filesystem access.
+
+### Speech
+
+This baseline supports optional reply speech, not voice input or wake-word
+conversation. Windows system speech uses the selected Windows voice and speed.
+Fish Audio is an optional cloud provider configured through local `.env`
+values; only the selected reply narration is sent to that provider. Speech
+providers do not receive native-tool authority.
+
+## Not available in this snapshot
+
+The following are not guaranteed by a fresh clone without external setup or
+additional acceptance:
+
+- managed ChatGPT subscription transport or access to the exact Luna model;
+- OpenAI Direct API transport without a user-entered key and provider access;
+- a successful normal Electron window on hosts with incompatible GPU/cache/ACL
+  conditions;
+- ChatGPT UI delegation or Codex engineering handoff;
+- Ollama, Qwen, another local model, or a GPT API client;
+- unrestricted shell/PowerShell, administrator access, arbitrary browser
+  control, arbitrary file writing, Git commit, or Git push by the model;
+- microphone input, wake word, STT, barge-in, or voice verification;
+- system tray/background lifecycle controls and a durable scheduler; and
+- autonomous computer control.
+
+The checked-in [ChatGPT UI + Codex implementation plan](docs/chatgpt-codex-implementation-plan.md)
+is a proposed plan, not proof that an executor exists. It must not be used to
+claim a feature is implemented.
+
+## New Electron UI and Legacy Flutter relationship
+
+The two UI directions have different status and entry points:
+
+| UI | Role | Core relationship |
+| --- | --- | --- |
+| Electron New UI | **Primary candidate UI**; source and lockfile are included in this branch. | Consumes the same loopback Core through a fixed main-process bridge; it does not own routing, permissions, tools, or telemetry. |
+| Legacy Flutter | **Compatibility client**; retained for recovery and comparison. | Uses the current Core/API foundation through `desktop_ui/`. |
+
+The Electron candidate is the replacement direction, but a healthy window must
+still be distinguished from Core readiness and AI availability. A UI opening
+successfully is not proof that the Core is ready, a provider is authenticated,
+a model is available, or a request can execute a local action.
+
+The candidate's `electron_motion_preview/` has a sandboxed preload and fixed
+bridge to `127.0.0.1:8765`. Its surface includes Core health, telemetry,
+conversation, projects/Git/files/search, tasks, Obsidian metadata, AI mode,
+and bounded speech operations. Renderer code is not an HTTP client and does
+not receive tool or shell authority.
+
+That active line also contains a proposed Luna foreground path:
+
+- **Managed subscription:** the local Codex App Server, managed ChatGPT login,
+  exact model `gpt-5.6-luna`, and a `:read-only` profile. The account must be
+  signed in and must actually expose that model.
+- **Direct API:** the exact Luna model through the OpenAI Responses API, with
+  a user-entered OpenAI API key held only in the Core process. Normal provider
+  billing, quota, account, and model-access limits apply.
+- **No silent fallback:** a failed managed transport, missing model, failed
+  login, missing key, quota error, or network error is reported explicitly;
+  JARVIS does not silently switch to Gemini, another model, or another mode.
+- **No model execution authority:** Luna text transport does not receive
+  shell, browser, filesystem, MCP, plugin, or native-tool authority. Existing
+  native intents remain on the Core permission/confirmation path.
+
+The candidate records contain source/static tests and some ordinary-user
+runtime evidence, but several real-window, audio, Core-startup, and
+managed-account acceptance rows remain environment-bound or pending. They are
+not a universal release claim.
+
+### Target architecture reference
+
+The active coordination line maintains the canonical target at the relative
+path `docs/architecture/TARGET_ARCHITECTURE.md`. That file is not present in
+this clean baseline, so this README intentionally does not link to it as if a
+fresh clone could open it. The checked-in implementation plan above is the
+available roadmap artifact; neither it nor this README replaces the canonical
+Target document.
+
+## Requirements
+
+### Required for the New Electron candidate
+
+- Windows with PowerShell.
+- CPython 3.12.x or newer with `venv` and `pip`.
+- Node.js `>=22.12.0` and npm.
+- Git for cloning and source inspection.
+- A managed Codex installation (`codex.cmd`) and a signed-in account with
+  access to exact `gpt-5.6-luna` only if managed AI chat is required. The UI can
+  open without this external account, but AI status will remain unavailable.
+
+The candidate's `setup.ps1` creates `.venv`, installs the captured
+`requirements.lock.txt`, runs `npm ci` in `electron_motion_preview/`, and can
+run the static/Node checks. It never writes credentials or starts an AI turn.
+
+### Required for the Legacy Flutter compatibility build
+
+- Windows with PowerShell. Windows 11 is the current development environment;
+  this repository does not declare a minimum Windows version.
+- Git for cloning and source inspection.
+- A CPython installation with `venv` and `pip`. The candidate includes a
+  Python lock captured with Python 3.12.14; verify the interpreter with
+  `python --version` before creating `.venv`.
+- Flutter Windows tooling. `desktop_ui/pubspec.yaml` requires Dart `^3.12.2`.
+  The current development environment used Flutter 3.44.9 / Dart 3.12.2;
+  that is an observed toolchain, not a fabricated minimum.
+- Visual Studio with **Desktop development with C++** for Windows Flutter
+  builds.
+- Windows Developer Mode when Flutter plugin symlinks are required during a
+  build. It is not needed merely to run an already-built Release app.
+
+The compatibility `run-desktop.ps1` currently contains a default Flutter path for
+the original development machine. If that path does not exist on your PC,
+edit the script's `$Flutter` value to your own `flutter.bat` before building.
+The commands below do not depend on a personal absolute path.
+
+### Python packages
+
+`requirements.txt` is the human-maintained top-level dependency declaration.
+For this candidate, `setup.ps1` installs the captured versions from
+`requirements.lock.txt`:
 
 ```text
-config/project_roots.json
+fastapi
+pydantic
+python-dotenv
+uvicorn[standard]
+psutil
+nvidia-ml-py==13.610.43
+chromadb==1.5.9
+sentence-transformers==6.0.1
+watchfiles==1.2.0
 ```
 
-Example:
+The unpinned packages follow the resolver selected by your environment. The
+first RAG initialization can be heavier than the Core-only startup because it
+uses the pinned Chroma and sentence-transformers dependencies.
 
-```json
-{
-  "roots": [
-    "C:\\Users\\YOUR_USERNAME\\GitHub",
-    "C:\\Users\\YOUR_USERNAME\\Documents\\GitHub"
-  ]
-}
+### Optional current integrations
+
+- **Gemini BYOK:** a Google AI Studio/Gemini API key in local `.env`.
+- **Fish Audio:** a Fish Audio key and, if needed, an authorized reference
+  voice ID in local `.env`.
+- **NVIDIA telemetry:** an installed NVIDIA driver/NVML-capable environment;
+  CPU and memory monitoring continue without it.
+- **Obsidian:** a local vault that the user explicitly registers in Settings.
+
+### AI/account prerequisites
+
+The Electron source and lockfile are included in this candidate:
+
+- The active Electron lockfile resolves Electron `39.8.10` and
+  `@electron/packager` `19.1.1`; its package metadata requires Node `>=22.12.0`.
+- The managed Luna path requires a local Codex installation, a managed
+  ChatGPT login, and access to exact `gpt-5.6-luna`; it is not a free/unlimited
+  service guarantee.
+- The Direct API path requires an OpenAI API key, network access, provider
+  billing/quota, and exact model access.
+
+These account prerequisites are not bundled into the repository and are not
+silently replaced by Gemini or another provider.
+
+## Installation
+
+All commands below are PowerShell commands from a fresh clone. The repository
+remote verified for this checkout is:
+
+```text
+https://github.com/Justin11-13/JARVIS_Local_AI.git
 ```
 
-JARVIS only scans directories configured here.
-
-To manually register projects, you can also use
-[config/projects.example.json](config/projects.example.json) as a template:
+### 1. Clone the candidate branch
 
 ```powershell
-if (-not (Test-Path config\projects.json)) {
-    Copy-Item config\projects.example.json config\projects.json
-}
+git clone --branch codex/electron-source-candidate-20260912 --single-branch https://github.com/Justin11-13/JARVIS_Local_AI.git
+cd JARVIS_Local_AI
+git log -1 --oneline
 ```
 
-Local project configuration should not be committed.
+The branch must be published before this command can work from GitHub. If the
+candidate is later promoted to `main`, clone `main` instead and verify the
+reported commit and candidate records.
 
-### 6. Build the desktop app and create its shortcut
-
-Complete the [Flutter Windows toolchain setup](https://docs.flutter.dev/platform-integration/windows/setup),
-then check it and build:
+### 2. Install the locked Python and Electron dependencies
 
 ```powershell
-& "C:\Flutter-3.44.9\flutter\bin\flutter.bat" doctor -v
+python --version
+node --version
+.\setup.ps1 -Verify
+```
+
+`setup.ps1 -Verify` runs Python compile checks, `npm run verify:static`, and 34
+Electron Node tests. It does not claim that a real managed account, GPU, audio
+device, or native confirmation window has been accepted. Do not commit `.venv/`,
+`electron_motion_preview/node_modules/`, downloaded model/cache data, or local
+databases.
+
+### 3. Configure Gemini BYOK (optional)
+
+Gemini is optional. The Core and local telemetry can start without it, while
+free-form cloud reasoning needs the user's own key.
+
+```powershell
+if (-not (Test-Path .env)) {
+    Copy-Item .env.example .env
+}
+notepad .env
+```
+
+Set only the local values you intend to use:
+
+```dotenv
+JARVIS_BRAIN_PROVIDER=gemini
+GEMINI_API_KEY=PASTE_YOUR_OWN_KEY_HERE
+GEMINI_MODEL=gemini-3.5-flash-lite
+GEMINI_ENABLED=true
+```
+
+Never put the key in Git, an issue, a screenshot, a prompt, or a source file.
+Google's current documentation should be checked before distributing a build:
+
+- [Gemini API key guide](https://ai.google.dev/gemini-api/docs/api-key)
+- [Gemini API Additional Terms](https://ai.google.dev/gemini-api/terms)
+
+JARVIS does not silently replace an unsupported provider or model with Gemini.
+An unavailable provider remains unavailable and must be corrected explicitly.
+
+### 4. Configure project roots (optional)
+
+```powershell
+if (-not (Test-Path config\project_roots.json)) {
+    Copy-Item config\project_roots.example.json config\project_roots.json
+}
+notepad config\project_roots.json
+```
+
+Use paths that exist on your own machine. The scanner never treats an
+unregistered directory as a project root.
+
+### 5. Configure optional reply speech
+
+Windows system speech uses the voices installed in **Settings → Time & language
+→ Speech**. It does not require an API key.
+
+For Fish Audio, keep credentials local:
+
+```dotenv
+FISH_API_KEY=PASTE_YOUR_OWN_KEY_HERE
+FISH_REFERENCE_ID=OPTIONAL_AUTHORIZED_VOICE_MODEL_ID
+```
+
+A valid key without provider credits or access may still produce no audio. JARVIS
+does not replace a failed speech provider with browser speech or another hidden
+provider.
+
+## New Electron UI
+
+The New Electron UI is included in this candidate and is the primary desktop
+direction. Its package boundary is:
+
+```text
+electron_motion_preview/package.json
+electron_motion_preview/package-lock.json
+```
+
+Run the candidate after setup:
+
+```powershell
+.\run-new-ui.ps1 -Edition development
+```
+
+The shared source also exposes an `internal-test` profile. Its current
+renderer-routing difference and the named package/install/uninstall workflow
+are recorded in [`docs/editions.md`](docs/editions.md). The internal profile
+must not be distributed until its Core port, instance ownership, and separate
+user-data directory are verified end to end.
+
+Check the existing desktop shortcut without changing it:
+
+```powershell
+.\verify-new-ui-shortcut.ps1
+```
+
+For renderer/WebGL verification without starting the Core:
+
+```powershell
+.\run-new-ui.ps1 -Verify
+```
+
+Normal startup uses `core-supervisor.cjs` to reuse a ready Core or start the
+project-local `.venv\Scripts\python.exe` on `127.0.0.1:8765`. A non-ready
+service already occupying that port is reported as an explicit failure. The
+Electron shell does not include an installer or a bundled Python/Node runtime.
+
+The current candidate verification is source/static verified, not a universal
+runtime or managed-account acceptance. See [AI and billing boundaries](#ai-and-
+billing-boundaries) before selecting a transport.
+
+### Candidate verification boundary
+
+- `npm ci` completed from `electron_motion_preview/package-lock.json`.
+- `npm run verify:static` passed.
+- `node --test test/*.cjs` passed with 34/34 tests.
+- Candidate Python dependency installation and `compileall` passed.
+- The full Python test discovery passed 156/156 after the test-only import correction;
+  the corrected file has a new hash and is recorded separately from the
+  original 45-file handoff fingerprint.
+- A short local Core smoke returned `core.status = ready` from
+  `http://127.0.0.1:8765/api/health`; it also correctly reported AI as
+  `managed_subscription` / `not_checked` without an account check or inference.
+- On the current restricted host, `run-new-ui.ps1 -Verify` reached Electron but
+  failed at the renderer boundary because the GPU child exited with
+  `0xC0000135`, the cache directory was not writable, and Electron returned
+  `ERR_FAILED`. No GPU flag or hidden fallback was added; this remains a
+  machine-specific acceptance gate.
+- Real managed login, model access, native confirmation, audio, and normal
+  Electron/Core smoke remain explicit acceptance steps, not inferred status.
+
+## Legacy Flutter compatibility desktop
+
+The Legacy Flutter client is retained as a compatibility and recovery path,
+not the long-term UI direction.
+
+### Build and run
+
+After correcting the `$Flutter` path in `run-desktop.ps1` if necessary:
+
+```powershell
 .\run-desktop.ps1 -BuildOnly -Release
-.\create-desktop-shortcut.ps1
-```
-
-If your SDK path differs, use that path for `doctor` and update the launcher as
-described in [Requirements](#requirements). Resolve Windows/Visual Studio toolchain
-errors before building.
-
-Double-click **JARVIS** on your Windows desktop. The shortcut uses the compiled
-Release app: no terminal, dependency download, or Flutter compilation on each
-launch. It starts the local API when needed and waits for it to become ready.
-
-The first build downloads locked Flutter dependencies into the ignored
-`.pub-cache/` inside this repository; the shared AppData cache is not modified.
-Keep the repository, virtual environment, and complete build folder in place.
-The shortcut is not a standalone installer, and the executable needs its nearby
-DLLs and `data/` directory.
-
-### Other ways to run
-
-For Flutter development, including the usual build/run output:
-
-```powershell
 .\run-desktop.ps1
 ```
 
-For the terminal-only assistant:
+The script uses a repository-local `.pub-cache/`, runs `flutter pub get
+--enforce-lockfile`, and starts the loopback API on `127.0.0.1:8765` only when
+that port is not already listening. The first build downloads Flutter
+packages; later builds reuse the local cache.
+
+The current shortcut script creates the **Legacy UI** shortcut only after a
+Release build:
 
 ```powershell
-.\.venv\Scripts\python.exe -m app.main
+.\create-desktop-shortcut.ps1
 ```
 
-### Updating and troubleshooting
+The `.lnk` file is a convenience launcher, not a standalone installer. Keep
+the repository, the virtual environment, the Release executable, its DLLs, and
+its `data/` directory together. Do not assume a shortcut created on one PC can
+be copied to another PC.
 
-- **Flutter source changed:** close the Release app and rerun
-  `.\run-desktop.ps1 -BuildOnly -Release`. The existing shortcut will open the
-  updated build.
-- **Python backend changed:** restart the existing JARVIS API; opening another
-  desktop window does not reload a running backend.
-- **Shortcut cannot start:** check the error dialog and `tmp/desktop-startup.log`.
-  For build diagnostics, run `.\run-desktop.ps1 -BuildOnly` in PowerShell.
-- **API connected, reasoning unavailable:** configure the Codex executor when
-  that migration phase is complete.
+### Development mode
 
-When the shortcut starts the API, closing that desktop window stops the API too.
-An API that was already running is reused and is not stopped by this shortcut.
-The shortcut does not add Windows login startup or a keyboard hotkey. More details are in the
-[desktop guide](desktop_ui/README.md).
-
----
-
-## Development Mode
-
-The **terminal CLI** supports automatic restart during development. This does
-not hot-reload the separate desktop API process.
-
-`watchfiles` is installed by `requirements.txt`; no separate command is needed.
-
-### Start development mode
+For the terminal CLI with Python auto-reload:
 
 ```powershell
 .\dev.ps1
 ```
 
-When Python source files change, JARVIS will automatically restart and load the updated code.
-
-For normal desktop usage, use the **JARVIS** desktop shortcut. To run the CLI
-without auto-reload:
+For a terminal-only run without auto-reload:
 
 ```powershell
 .\.venv\Scripts\python.exe -m app.main
 ```
 
+For an explicit local API process:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn app.api:app --host 127.0.0.1 --port 8765
+```
+
+The CLI auto-reload process and the desktop API process are separate. After
+changing Python backend code, stop and restart the API that the desktop is
+actually using.
+
+### Stop and restart safely
+
+- Stop a foreground CLI/API with `Ctrl+C` in the terminal that launched it.
+- Close the Legacy app before rebuilding its Windows executable.
+- A shortcut-owned API is stopped by the launcher when its own window closes;
+  an API that was already running is reused and left alone.
+- Before stopping anything by PID, inspect the listener on `127.0.0.1:8765`
+  and confirm that it is the JARVIS process you started. Do not kill an
+  unrelated process merely because it owns the port.
+
+Check Core readiness without implying AI readiness:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8765/api/health | ConvertTo-Json -Depth 8
+```
+
 ### Verification
 
-Backend tests and a Windows dependency/build check, from the repository root:
+From the repository root:
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests
 .\run-desktop.ps1 -BuildOnly
 ```
 
-To run Flutter analysis and widget tests with the same project-local cache:
+For Flutter checks, use the same SDK path and repository-local cache as the
+launcher:
 
 ```powershell
 $env:PUB_CACHE = Join-Path $PWD ".pub-cache"
-$FlutterSdk = "C:\Flutter-3.44.9\flutter\bin\flutter.bat"
+$Flutter = "C:\path\to\flutter\bin\flutter.bat"
 Push-Location desktop_ui
 try {
-    & $FlutterSdk pub get --enforce-lockfile
-    & $FlutterSdk analyze --no-pub
-    & $FlutterSdk test --no-pub
+    & $Flutter pub get --enforce-lockfile
+    & $Flutter analyze --no-pub
+    & $Flutter test --no-pub
 } finally {
     Pop-Location
 }
 ```
 
-Use your actual Flutter path if different. These commands do not install a
-shortcut or launch the UI; the `PUB_CACHE` assignment applies to this shell.
+These are verification commands, not a claim that they have passed on every
+machine. The build and test result must be recorded for the exact checkout and
+toolchain used.
 
----
+## AI and billing boundaries
 
-## Example Commands
+### Gemini in this baseline
 
-### Applications
+Gemini is a user-configured optional cloud brain. Python validates model tool
+names, arguments, paths, secret boundaries, and permission decisions before a
+native operation runs. Gemini does not receive the `.env` key, an unrestricted
+terminal, or arbitrary file contents.
 
-```text
-打开 Chrome
-```
+Cloud providers may process prompts and responses under their own terms. Do not
+send passwords, private keys, confidential source, or personal data unless you
+have deliberately reviewed the provider's current policy and accepted that
+data flow.
 
-```text
-打开 Spotify
-```
+### Luna transport in this candidate
 
-```text
-打开 Visual Studio Code
-```
+The candidate uses two explicit, user-selected transports for the exact model
+`gpt-5.6-luna`:
 
-### System
+- managed Codex App Server with managed ChatGPT authentication; or
+- OpenAI Direct API with a user-entered key held only in the Core process.
 
-```text
-我的 CPU 和 RAM 现在用了多少？
-```
+Neither path is a free/unlimited guarantee, and not every account necessarily
+has access to the exact model. Core health, login/key state, model access,
+quota, and AI availability are separate facts. A UI that opened successfully
+does not prove them.
 
-### Project Discovery
+No transport silently falls back to another model, provider, or mode. The
+Electron shell and Core source are included, but managed login, model access,
+quota, and normal-user smoke are external acceptance requirements.
 
-```text
-重新扫描我的 project
-```
+## Security and privacy
 
-### Projects
+JARVIS is intentionally conservative:
 
-```text
-我有哪些 project？
-```
+- Python Core policy, not model wording, decides whether an action may run.
+- Sensitive power actions require explicit confirmation.
+- Project paths are restricted to registered roots.
+- Project file tools are read-only and credential-like files/results are
+  filtered before model context is built.
+- Obsidian notes are excluded by default and carry explicit access labels.
+- `.env`, API keys, local registries, RAG indexes, caches, logs, and databases
+  stay out of Git.
+- The loopback API should not be exposed to a LAN or public tunnel without a
+  separately verified authentication and permission design.
+- A model response is not an authorization, and a successful HTTP response is
+  not proof that a requested side effect occurred.
 
-```text
-告诉我 FYP 的资料
-```
+The locked Electron dependency audit currently reports three high-severity
+dependency-node findings for `extract-zip@2.0.1`, reached through the direct
+development dependencies `electron` and `@electron/packager`. npm reports no
+available fix for this advisory range; `npm audit --omit=dev` reports zero
+production findings. The package is used by Electron installation/packaging
+paths, not by the renderer's application code. Re-run the audit before a
+public release, and do not apply an unreviewed `npm audit fix --force`.
 
-```text
-打开 FYP
-```
+The native-tool boundary does not provide arbitrary PowerShell, arbitrary
+shell, arbitrary file deletion/modification, Git commit/push, or
+administrator-level operations to the model.
 
-### Multi-Step Request
+## Local files and generated data
 
-```text
-打开 FYP，然后检查它的 Git status
-```
-
-### Files
-
-```text
-看看 FYP 根目录有什么文件
-```
-
-```text
-读取 FYP 的 composer.json
-```
-
-```text
-在 FYP 里面搜索 RoomController
-```
-
----
-
-## Security Model
-
-JARVIS uses allow-listed native tools and Python-enforced routing decisions.
-
-The native-tool path does not expose arbitrary shell execution to Gemini.
-
-### Currently Allowed
-
-- Open discovered applications
-- Read CPU usage
-- Read RAM usage
-- Read NVIDIA GPU telemetry through the desktop API
-- Read local battery, network, and running-process status
-- Adjust volume, toggle mute, and control active media playback
-- Open declared Windows folders and selected Windows Settings pages
-- Lock, sleep, restart, or shut down Windows only after one explicit
-  confirmation
-- Discover projects from configured roots
-- List discovered projects
-- Read project metadata
-- Open projects
-- Read Git status
-- List project files
-- Read project files
-- Search project source code
-
-### Native Tool Restrictions
-
-Native tools do not provide:
-
-- Arbitrary PowerShell execution
-- Arbitrary shell execution
-- File deletion
-- File modification
-- Code modification
-- Git commit
-- Git push
-- System configuration changes
-- Administrator-level system operations
-
-The desktop API binds to loopback when launched by the supplied scripts. Do not
-expose it to a network. The full permission/trust model described below remains
-planned, including dedicated native write and Git commit/push approval flows.
-
----
-
-## Local Configuration
-
-The following files should remain local and should not be committed:
+Keep these machine-local and never commit credentials or generated runtime
+state:
 
 ```text
+.env
 .venv/
 .pub-cache/
 desktop_ui/build/
 desktop_ui/.dart_tool/
 tmp/
-.env
+data/
 config/apps.json
 config/projects.json
 config/project_roots.json
+config/obsidian_vaults.json
 __pycache__/
 *.pyc
 *.db
@@ -818,7 +692,7 @@ __pycache__/
 *.sqlite3
 ```
 
-Use example configuration files instead:
+Use the checked-in example files instead:
 
 ```text
 .env.example
@@ -827,384 +701,193 @@ config/projects.example.json
 config/project_roots.example.json
 ```
 
----
+## Example requests
 
-## Development Status
+These examples use the current bounded tool vocabulary; they do not authorize
+actions by themselves.
 
-JARVIS is an experimental Windows desktop assistant with a working Flutter UI,
-loopback API, guarded native Windows tools, live telemetry, and Gemini BYOK
-chat. Its former local-model loop has been removed. The ChatGPT UI and Codex
-executors remain planned integrations.
-
-The current product foundation includes the desktop shortcut, Assistant / Tasks /
-Device / Settings / Errors pages, and session-only diagnostics. Voice input,
-wake word, a desktop companion, persistent history, system tray integration,
-and editable model/routing configuration are still planned.
-
-It is not yet intended to provide unrestricted autonomous control of a computer.
-
----
-
-## Product Master Plan
-
-This section is a short product overview. The authoritative delivery sequence
-is the bilingual [ChatGPT UI + Codex implementation plan](docs/chatgpt-codex-implementation-plan.md).
-A feature marked **Planned** is not available yet. Existing features remain
-deliberately conservative while the broader permission system is built.
-
-### Product Vision
-
-JARVIS is intended to become a local-first personal Windows AI assistant:
-not only a chatbot, but a system that can understand a request, select a safe
-executor, observe the result, continue when appropriate, and notify the user.
-
-~~~text
-User
- ↓
-Understand intent
- ↓
-Choose tool or agent
- ↓
-Check policy and permission
- ↓
-Execute
- ↓
-Observe result
- ↓
-Notify user
-~~~
-
-### Product Architecture
-
-~~~text
-                         JARVIS
-                            │
-          ┌─────────────────┼──────────────────┐
-          │                 │                  │
-   Voice Interface     JARVIS Brain       Desktop UI
-          │                 │                  │
-    Wake word / STT     Intent / Router      Settings
-          │                 │                  │
-          └──────────── TaskRouter ───────────┘
-                            │
-        ┌───────────────────┴───────────────────┐
-        ▼                                       ▼
-  Python / PowerShell                        ChatGPT UI + Codex
-  Native small tasks                        Specialist agents
-                            │
-                      Permission Layer
-                            │
-                      Task Execution
-                            │
-                  Monitor and Notification
-~~~
-
-**Implemented foundation:** native tools, TaskRouter, TaskManager, terminal
-notifications, a loopback FastAPI service, and the Flutter desktop app with
-live telemetry, session diagnostics, and a desktop shortcut. The local-model
-conversation loop has been removed.
-
-**Planned:** the permission boundary for every executor, authenticated ChatGPT
-UI hand-off/result collection, Codex hand-off for coding tasks, voice,
-advanced/persistent settings, system tray and lifecycle controls, browser
-control, and hardware-control integrations. NVIDIA telemetry is available;
-hardware control is not.
-
-### Brain, Models, and Executors
-
-The JARVIS Brain interprets user intent. It does not receive unrestricted
-system access; Python policy decides what is actually allowed.
-
-| Component | Role | Current status |
-| --- | --- | --- |
-| Native Python / PowerShell tools | Small supported actions such as opening apps, reading system information, project inspection, Git status, and read-only file access. | Implemented foundation; permission coverage is being expanded. |
-| ChatGPT UI executor | Broader questions, web-assisted research, and visible-result collection through the authenticated ChatGPT interface. | Planned; no GPT API. |
-| Codex executor | Repository-scale coding, debugging, implementation, tests, and action proposals. | Planned; no unconfigured request is executed. |
-
-Intended model routing:
-
-~~~text
-Small supported work         → Native Python / PowerShell tool
-Question / research          → ChatGPT UI executor when configured
-Heavy coding / repo work     → Codex executor when configured
-~~~
-
-Local execution remains the default for supported Windows operations. ChatGPT
-and Codex must remain behind the routing and permission boundary; they may
-propose actions but cannot bypass Python policy.
-
-### Computer, Application, Browser, and Project Control
-
-Application control is planned in three levels:
-
-1. **Native/direct control** — predictable actions through Windows or supported
-   APIs, such as opening an application, reading system status, or controlling
-   volume.
-2. **Generic computer control** — a controlled agent can operate an interface
-   when no dedicated integration exists.
-3. **Dedicated integration** — high-value integrations, for example browser,
-   Spotify, Windows, or supported hardware APIs.
-
-**Implemented foundation:** Start Menu application discovery, app opening,
-project discovery from configured roots, registered-project information,
-opening projects in VS Code, Git status, and read-only project file tools.
-
-**Planned:** closing applications, volume/media controls, browser automation,
-project test execution, Git diff, diagnostics, safe file changes, and
-dedicated hardware integrations. Hardware support must use a documented vendor
-API, CLI, or supported controller.
-
-### Voice, Desktop UI, and Settings
-
-**Planned voice flow:**
-
-~~~text
-Microphone
- ↓
-Wake word: Jarvis
- ↓
-Speech-to-text
- ↓
-JARVIS Brain and TaskRouter
- ↓
-Execution
- ↓
-Text-to-speech
-~~~
-
-A wake word should begin a short conversation session so the user can make
-follow-up requests without repeating it. The planned stack includes
-openWakeWord, voice activity detection, faster-whisper, and Piper or Kokoro.
-
-**Implemented desktop experience:**
-
-- Flutter Windows app with Assistant, Tasks, Device, Settings, and Errors pages.
-- Desktop shortcut for the Release app, with automatic local API startup/reuse.
-- Live CPU, memory, and NVIDIA GPU monitoring, interval controls, and pause.
-- Compact composer, tool evidence, session-only task results, and diagnostics.
-- Shared steel/cyan styling and responsive layouts; appearance/monitor settings
-  are session-only. Model and routing controls are read-only.
-
-**Planned desktop experience:**
-
-- System tray, background lifecycle controls, and Windows notifications.
-- Settings for model/provider, microphone, wake word, conversation timeout,
-  project roots, application scan roots, routing mode, and agent settings.
-- Desktop orb/pet, additional visual themes/materials, and persistent preferences.
-
-Eventually, users should configure model and scan-path options in the UI rather
-than editing configuration files or source constants.
-
-### Permission and Security Model
-
-JARVIS must enforce policy before an executor starts. A prompt or model
-decision is never the final security boundary.
-
-~~~text
-User request
- ↓
-Risk classification
- ↓
-Permission check
- ↓
-Allowed?
- ├── No  → reject or offer a restricted safe action
- └── Yes → Native tool / approved specialist agent
-~~~
-
-The planned trust model has four levels:
-
-| Level | Condition | Intended permissions |
-| --- | --- | --- |
-| 0 — Locked | Windows device is locked. | Very limited low-risk actions; no private data or privileged work. |
-| 1 — Restricted | Device unlocked but speaker is not verified. | General questions and selected low-risk actions only. |
-| 2 — Trusted | Authorized Windows session and verified voice, where voice is enabled. | Broader private/project access, still subject to policy. |
-| 3 — Critical confirmation | A destructive, privileged, external, or state-changing action is requested. | Explicit confirmation is required for that specific action. |
-
-Voice verification is an additional trust signal, never the only authorization
-factor for destructive or privileged operations.
-
-**Implemented safeguards:** Python-enforced permission evaluation and explicit
-confirmation for sensitive native or external actions.
-
-**Planned safeguards:** the full locked/restricted/trusted state model,
-credential protection, file-write permissions, terminal/PowerShell policy,
-Git commit/push approval, and explicit approval before a request or attachment
-is submitted to ChatGPT or another external service.
-
-### Task Lifecycle and Notifications
-
-A task should be tracked rather than simply launched and forgotten.
-
-~~~text
-QUEUED → RUNNING → OBSERVING → COMPLETED
-                    ↓
-                  FAILED
-~~~
-
-Complex agents may retry a bounded, safe recovery loop before reporting a
-failure.
-
-**Implemented foundation:** managed tasks track creation, start, completion,
-duration, result, and error; terminal notifications report completion or
-failure. The desktop Tasks page lists requests and results from the current UI
-session; it is not a durable or complete backend task archive.
-
-**Planned:** observation/retry policy, persistent task history, Windows notifications,
-desktop UI notifications, and voice notifications.
-
-### Local API
-
-**Implemented:** `app/api.py` provides the desktop's FastAPI interface on
-`127.0.0.1:8765`, keeping Flutter separate from JARVIS internal modules.
-
-~~~text
-Desktop UI
- ↓
-FastAPI Local API
- ↓
-JARVIS Core
- ↓
-TaskRouter
- ↓
-Tools / Models / Agents
-~~~
-
-Current endpoints include:
-
-- `GET /api/health` — API status and configured brain/routing information;
-  does not contact a reasoning backend.
-- `GET /api/telemetry` — read-only CPU, memory, and NVIDIA GPU counters.
-- `POST /api/chat` — conversation and tool execution through Core/TaskRouter.
-- `GET /api/projects` and the `/api/projects/...` actions — registered-project
-  metadata, Git status, read-only file tools, and explicit registry refresh.
-
-The API retains Python routing checks for tool execution. Persistent task,
-editable settings, model-management, and broader application-control APIs are
-still planned. Loopback binding is not a substitute for a full permission model.
-
-### Delivery Phases
-
-#### Phase 0 — Current Foundation
-
-- [x] Native application/system tools, project tools, and routing safeguards.
-- [x] Local-model dependencies and runtime loop removed.
-- [x] Project discovery, project registry, Git status, and read-only project
-  file tools.
-
-#### Phase 1 — Safe Developer Workflow
-
-- [x] Route native state-changing actions through one Python permission gate.
-- [ ] Add direct Python/PowerShell execution for explicitly supported,
-  low-risk operations.
-- [x] Add Gemini BYOK understanding with Python-validated native tool calls.
-- [ ] Add a confirmation-gated ChatGPT UI executor without a GPT API.
-- [ ] Add a confirmation-gated Codex executor for heavy coding tasks.
-
-Detailed acceptance criteria and later phases are maintained in the
-[implementation plan](docs/chatgpt-codex-implementation-plan.md).
-
-#### Phase 2 — Full Permission Boundary
-
-- [ ] Locked, restricted, and trusted modes.
-- [ ] Critical-action confirmation for deletion, installations, admin actions,
-  system settings, credentials, and external communications.
-- [ ] Explicit terminal, PowerShell, browser, and file-write policies.
-
-#### Phase 3 — Local API and Desktop Product
-
-- [x] Loopback FastAPI API reusing Core tools and routing policy.
-- [x] Flutter Windows shell with Assistant, Tasks, Device, Settings, and Errors.
-- [x] Live CPU/RAM/NVIDIA GPU monitoring and a status dashboard.
-- [x] Session-only appearance/monitor preferences and error diagnostics.
-- [x] Release build and one-click desktop shortcut.
-- [ ] Persistent and editable brain, routing, project, and agent settings.
-- [ ] System tray, backend lifecycle controls, and Windows notifications.
-
-#### Phase 4 — Voice and Multimodal Interaction
-
-- [ ] Wake word, microphone input, STT, TTS, and conversation sessions.
-- [ ] Screenshot capture, screenshot understanding, and visual error analysis.
-- [ ] Voice verification as an additional trust signal.
-
-#### Phase 5 — Expansion
-
-- [ ] Local SQLite task history, project context, and user preferences.
-- [ ] Browser and dedicated application integrations.
-- [ ] Supported hardware integrations.
-- [ ] Evaluate web, mobile, macOS, Linux, and multi-device support after the
-  Windows local-first workflow is stable.
-
-### Non-Negotiable Engineering Rules
-
-- Do not expose unrestricted shell, PowerShell, or administrator access to a
-  language model.
-- Prefer native tools whenever they safely support the request.
-- Keep policy in Python and route all new agents through TaskRouter.
-- Validate paths, workspaces, and tool arguments before execution.
-- Require confirmation for destructive, privileged, external, or
-  state-changing actions.
-- Keep simple supported operations local and route cloud reasoning through the
-  selected BYOK provider.
-
----
-
-## Reasoning Backends
-
-JARVIS intentionally has no local model runtime and no GPT API client. Its
-current optional reasoning backend is Gemini BYOK. The API key remains in the
-user-local `.env`; Gemini can propose only the declared JARVIS tools, while
-Python applies routing, validation, and permission checks. Future ChatGPT UI
-and Codex integrations must preserve the same boundary and are never granted
-unrestricted computer control.
-
----
-
-## Obsidian Knowledge
-
-JARVIS can use one or more local Obsidian vaults as an opt-in personal wiki.
-Connect a vault from **Settings → Obsidian knowledge**. Vault paths remain in
-the local Core configuration and are never included in chat responses.
-
-Notes are excluded by default. Add these properties to a note that JARVIS may
-retrieve and send to the configured Gemini provider:
-
-```markdown
----
-title: Laravel Routing
-tags: [laravel, php]
-jarvis_access: rag
-status: current
-authority: personal
----
+```text
+打开 Chrome
 ```
 
-Use `jarvis_access: local-only` for local search without adding the note body
-to Gemini context, or `jarvis_access: excluded` to ignore it. JARVIS skips
-protected folders such as `.obsidian`, `.trash`, and `.git`. Search and open
-operations are read-only; create, append, and exact-text update operations
-show a preview and require confirmation through `PermissionManager`.
+```text
+我的 CPU 和 RAM 现在用了多少？
+```
 
----
+```text
+重新扫描我的 project
+```
+
+```text
+检查 FYP 的 Git status
+```
+
+```text
+读取 FYP 的 composer.json
+```
+
+```text
+在 FYP 里面搜索 RoomController
+```
+
+For a high-risk request such as shutting down Windows, the Core must ask for a
+clear confirmation before execution. A model or a README example cannot
+pre-approve it.
+
+## Roadmap
+
+The project is being developed in bounded Phase A–C. The current Legacy baseline
+is a foundation, not the complete target architecture.
+
+### Phase A — Core
+
+Target direction:
+
+- Luna intelligence through an explicitly selected transport;
+- JARVIS Core control, routing, permissions, and Python tools;
+- SQLite operational/personal memory and user preferences;
+- Obsidian, Knowledge Manager, RAG, and LLM Wiki boundaries; and
+- attributable AI usage tracking.
+
+The current checkout has only the parts listed under [Current features](#current-features).
+Target items are not automatically implemented because they appear on a
+roadmap.
+
+### Phase B — Assistant
+
+Planned/targeted work includes tasks and automation, scheduled and missed-task
+policy, wake word, STT, TTS/voice interrupt, working context, and screen
+awareness. Voice input and wake word are not available in this snapshot.
+
+### Phase C — Proactive
+
+After the necessary Core and Assistant foundations are stable, the target is an
+event bus with filtering, proactive assistance, smart notifications, presence
+awareness, error monitoring, and an explicitly authorized Codex handoff.
+
+### Phase D — explicitly out of scope
+
+Camera vision, mobile/multi-device support, IoT, smart-home control, and
+physical-environment awareness are future-only. A general request to
+“continue” or “implement the architecture” does not authorize Phase D.
+
+## Repository structure
+
+```text
+JARVIS_Local_AI/
+├── app/
+│   ├── main.py                 # Core registry and terminal loop
+│   ├── api.py                  # Loopback FastAPI interface
+│   └── desktop_launcher.py     # Legacy desktop/API launcher
+├── desktop_ui/                 # Flutter Windows client and widget tests
+├── config/                     # Example configuration; local copies are ignored
+├── docs/
+│   ├── screenshots/            # README screenshots
+│   └── chatgpt-codex-implementation-plan.md
+├── knowledge/                  # Repository-owned knowledge sources
+├── services/                   # Routing, tasks, telemetry, speech, memory, RAG
+├── skills/                     # Bounded native/project/file/Git tools
+├── electron_motion_preview/    # New Electron candidate and Node tests
+├── config/editions.json         # Shared development/internal-test profile contract
+├── tests/                      # Python regression tests
+├── .env.example
+├── dev.ps1
+├── setup.ps1                   # Candidate clean setup and static checks
+├── run-new-ui.ps1              # Start or verify the New Electron UI
+├── verify-new-ui-shortcut.ps1  # Read-only Electron shortcut ownership check
+├── package-edition.ps1         # Build a named local Windows edition package
+├── install-edition.ps1         # Install one named package and shortcut
+├── uninstall-edition.ps1       # Remove app files, preserving user data
+├── run-desktop.ps1
+├── create-desktop-shortcut.ps1
+├── LICENSE
+├── README.md
+├── requirements.txt
+└── requirements.lock.txt
+```
+
+The lock file captures the Python environment used for this candidate. The
+repository still does not bundle Python, Node.js, Electron, Codex login state,
+model weights, a Vault, or private configuration.
+
+## Troubleshooting
+
+### `python` is not recognized
+
+Install a supported CPython distribution, open a new PowerShell window, and
+rerun `python --version`. This repository does not silently switch to another
+interpreter.
+
+### Flutter SDK not found
+
+The launcher currently has a development-machine default path. Install the
+Flutter Windows SDK, ensure its `flutter.bat` is available, and edit the
+`$Flutter` value in `run-desktop.ps1` to that path. Then rerun `flutter doctor -v`
+and the Release build.
+
+### Flutter plugin or Visual Studio build failure
+
+Confirm Visual Studio's **Desktop development with C++** workload and Windows
+Developer Mode. These are build prerequisites, not Python packages. Do not
+disable security controls or run as administrator merely to hide an unresolved
+toolchain error.
+
+### API is offline or the port is occupied
+
+Check the actual listener and Core health:
+
+```powershell
+Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort 8765 -State Listen
+Invoke-RestMethod http://127.0.0.1:8765/api/health | ConvertTo-Json -Depth 8
+```
+
+If another application owns the port, stop only a confirmed JARVIS process or
+choose a separately designed configuration. Do not kill an unknown process.
+
+### Core is ready but AI is unavailable
+
+`/api/health` being reachable means the local Core is serving. It does not
+prove Gemini is configured, a key is valid, a model is accessible, or a cloud
+request can complete. Check `.env` explicitly; no hidden provider fallback is
+performed.
+
+### NVIDIA metrics show unavailable
+
+CPU and memory do not require NVIDIA. Check the installed driver and NVML
+support. The app should show an explicit unavailable state rather than inventing
+zeroes.
+
+### RAG starts slowly or cannot index
+
+The first RAG initialization may download/load embedding dependencies. Check the
+terminal output, confirm the configured Obsidian path exists, and reindex only
+after reviewing the displayed scope. Do not copy a vault into the repository or
+commit the generated `data/` index.
+
+### The New UI preview is missing
+
+Confirm that `electron_motion_preview/package.json` and
+`electron_motion_preview/package-lock.json` are present, then run
+`.\setup.ps1`. The New UI starts with `.\run-new-ui.ps1`; it does not require
+the Legacy Flutter SDK.
 
 ## Contributing
 
-Contributions are welcome.
+Keep changes narrow and traceable:
 
-When adding new tools:
+1. Read the current implementation and its documented boundary.
+2. Keep routing and permission decisions in the Python Core.
+3. Validate paths, arguments, data scope, and confirmation requirements.
+4. Add focused tests for security-sensitive behavior.
+5. Keep generated files, credentials, local profiles, and runtime logs out of
+   commits.
+6. Record what is implemented, what was actually verified, and what remains
+   blocked or planned.
 
-1. Keep each tool focused on one clear capability.
-2. Do not give the language model unrestricted shell access.
-3. Validate tool arguments before execution.
-4. Validate file paths before accessing files.
-5. Add permission checks before destructive operations.
-6. Keep platform-specific implementation separated where practical.
-7. Add tests for security-sensitive functionality.
-
----
+Do not claim a Target or Preview feature is current merely because a plan,
+mockup, screenshot, or separate dirty worktree describes it.
 
 ## License
 
-This project is licensed under the Apache License 2.0.
-
-See the `LICENSE` file for details.
+JARVIS is licensed under the Apache License 2.0. See [`LICENSE`](LICENSE) for
+the complete terms.
