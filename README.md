@@ -17,7 +17,7 @@ The current public-facing milestone is **JARVIS Internal Test**. It packages the
 
 当前面向测试者的里程碑是 **JARVIS 内测版**。它把 Electron 桌面端、本地 Python Core 和 Windows Codex App Server transport 封装进同一个安装器，并排除尚未完成的产品页面。
 
-> **Internal test status / 内测状态：** Package and packaged runtime verification passed on the development Windows host. Installation under a separate clean Windows account is still pending. The installer is unsigned, so Windows may show a SmartScreen warning. / 安装包及其运行时已在开发机通过验证，但尚未在独立的干净 Windows 账户完成安装验收。安装器目前未签名，因此 Windows 可能显示 SmartScreen 提示。
+> **Internal test status / 内测状态：** The final rebuilt installer is published as the [`v0.1` GitHub pre-release](https://github.com/Justin11-13/JARVIS_Local_AI/releases/tag/v0.1). Installation under a separate clean Windows account is still pending. The installer is unsigned, so Windows may show a SmartScreen or application-control warning. / 最终重封安装包已发布到 [`v0.1` GitHub 内测 Release](https://github.com/Justin11-13/JARVIS_Local_AI/releases/tag/v0.1)，但尚未在独立的干净 Windows 账户完成安装验收。安装器目前未签名，因此 Windows 可能显示 SmartScreen 或应用控制警告。
 
 [安装 Install](#install--安装内测版) · [功能 Features](#current-features--当前功能) · [AI 连接](#ai-connections--ai-连接) · [Obsidian](#obsidian-optional--可选-obsidian) · [未来范围](#future-scope--未来范围) · [安全](#security-boundary--安全边界)
 
@@ -54,11 +54,13 @@ Both editions share one architecture and one set of Core contracts. Internal Tes
 ### Desktop Experience / 桌面体验
 
 - Animated WebGL JARVIS Core with Amber, Cyan, Violet, and Matrix themes. / WebGL 动态 Core，提供 Amber、Cyan、Violet 和 Matrix 主题。
+- Theme supports eight locally persisted custom colors for background, surface, border, accent, text, muted text, Core A, and Core B, with reset to preset. / Theme 支持 8 项本地持久化自定义颜色：background、surface、border、accent、text、muted text、Core A、Core B，并可重置回预设。
 - Low motion, background mode, and optional start-on-login. / 支持 Low motion、后台运行和可选开机启动。
 - Live local system information when supported by the machine. / 在设备支持时显示真实本机状态。
 - Separate Tool Results, Events, and Errors surfaces. / Tool Results、Events 和 Errors 分页显示。
 - Windows OneCore voice selection, test playback, and optional automatic reading of new replies. / 可选择 Windows OneCore 语音、试听，并自动朗读新的回复。
 - JARVIS-only token usage when the provider reports real usage. / Provider 提供真实 usage 时，仅显示 JARVIS 自己的 Token 使用量。
+- Internal Test checks the trusted GitHub Release channel and shows an explicit update notice; downloading and installing remain user actions. / 内测版会检查受信任的 GitHub Release channel 并显示更新提示；下载和安装仍由用户明确执行。
 
 ### Local Data and Knowledge / 本地数据与知识
 
@@ -101,6 +103,13 @@ Current local installer / 当前本地产物：
 electron_motion_preview_internal_test\release\JARVIS-Internal-Test-0.1.0-Setup.exe
 ```
 
+Published asset / 已发布资产：[JARVIS-Internal-Test-0.1.0-Setup.exe](https://github.com/Justin11-13/JARVIS_Local_AI/releases/download/v0.1/JARVIS-Internal-Test-0.1.0-Setup.exe)
+
+```text
+Size / 大小: 816,647,011 bytes
+SHA-256: 3501645D93FF9A73402998488A0BA4D90E470F919F8563CCA4501FD17E4EE8B3
+```
+
 1. Run the Setup executable. / 运行 Setup 安装器。
 2. Choose an installation directory. / 选择安装目录。
 3. Launch **JARVIS 内测版** from Desktop or Start. / 从桌面或开始菜单打开 **JARVIS 内测版**。
@@ -111,7 +120,7 @@ A selected model name is not connectivity proof. Send a real, non-fixed message 
 
 选中模型名称不代表已经连通。必须成功发送一条非固定真实消息，才能把该 AI 路径视为已验证。
 
-The unsigned installer has not completed separate clean-machine acceptance. It is an internal artifact, not a stable release.
+The unsigned installer has not completed separate clean-machine acceptance. It is an internal pre-release, not a stable production release.
 
 当前未签名安装器尚未完成独立干净环境验收，因此属于内测产物，不是稳定发行版。
 

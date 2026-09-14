@@ -12,6 +12,7 @@ The final rebuilt installer is `816,647,011` bytes with SHA-256
 The unsigned package could not be launched on this host because Windows Application Control blocked the generated
 Core/Electron binaries; no policy bypass was attempted. Details: [Electron Internal Test Update Notice](prompts/feature/20260914-FEAT-electron-update-notice.md)
 and [Electron + JARVIS Core Windows Packaging](info/05-integrations/ELECTRON_CORE_PACKAGING.md).
+The bilingual README now links to the published `v0.1` asset and records the same final checksum.
 
 ## 2026-09-14 — Electron Custom Theme Palette (IMPLEMENTED — source/static/Node verified; package handoff pending)
 
