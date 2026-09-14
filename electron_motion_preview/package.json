@@ -1,0 +1,20 @@
+{
+  "name": "jarvis-electron-motion-preview",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Isolated local-only Electron validation shell for the JARVIS proposed WebGL desktop prototype.",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "verify:static": "node test/static-verify.cjs",
+    "verify": "electron . --verify",
+    "package:win": "electron-packager . JARVIS-Electron-Motion-Preview --platform=win32 --arch=x64 --out=dist --overwrite --asar"
+  },
+  "devDependencies": {
+    "@electron/packager": "^19.0.0",
+    "electron": "^39.0.0"
+  },
+  "allowScripts": {
+    "electron@39.8.10": true
+  }
+}

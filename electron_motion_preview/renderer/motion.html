@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
+  <title>JARVIS · proposed desktop UI</title>
+  <link rel="stylesheet" href="unified.css">
+  <link rel="stylesheet" href="live.css">
+</head>
+<body>
+  <div class="shell">
+    <section class="chat-pane card-layer" aria-label="JARVIS conversation">
+      <header class="chat-head">
+        <div class="brand-row">
+          <div class="brand"><svg viewBox="0 0 48 48" aria-hidden="true"><g fill="none" stroke="currentColor"><circle cx="24" cy="24" r="20" stroke-width="1" stroke-dasharray="27 15" transform="rotate(-30 24 24)"/><path d="M24 9 37 16.5v15L24 39 11 31.5v-15Z" stroke-width="1.5"/><path d="m24 16 7 4v8l-7 4-7-4v-8Z"/><circle cx="24" cy="24" r="3" fill="currentColor"/><path d="M24 9v7m13 .5-6 3.5m6 11.5L31 28M24 39v-7m-13-.5 6-3.5m-6-11.5 6 3.5" opacity=".6"/></g></svg><span>J.A.R.V.I.S</span></div>
+          <span class="brand-state">LOCAL</span>
+        </div>
+        <div class="local-clock" aria-live="polite" aria-label="Local time">
+          <time id="local-time">--:--:--</time>
+          <span id="local-date">Loading local date…</span>
+        </div>
+      </header>
+
+      <section id="view-assistant" class="view assistant-view active" aria-label="Assistant live chat">
+        <div id="messages" class="conversation" aria-live="polite">
+          <article class="message initial-message">
+            <span class="avatar assistant-avatar" aria-hidden="true"><svg viewBox="0 0 48 48" aria-hidden="true"><g fill="none" stroke="currentColor"><circle cx="24" cy="24" r="20" stroke-width="1" stroke-dasharray="27 15" transform="rotate(-30 24 24)"/><path d="M24 9 37 16.5v15L24 39 11 31.5v-15Z" stroke-width="1.5"/><path d="m24 16 7 4v8l-7 4-7-4v-8Z"/><circle cx="24" cy="24" r="3" fill="currentColor"/><path d="M24 9v7m13 .5-6 3.5m6 11.5L31 28M24 39v-7m-13-.5 6-3.5m-6-11.5 6 3.5" opacity=".6"/></g></svg></span>
+            <div><strong>JARVIS</strong><span id="reply-state">● Checking Core</span><p id="reply">Connect to the local JARVIS Core to begin.</p><small class="response-time" hidden></small></div>
+          </article>
+        </div>
+        <form id="composer" class="composer">
+          <label class="sr" for="prompt">Message JARVIS</label>
+          <input id="prompt" autocomplete="off" aria-keyshortcuts="Control+L" placeholder="Ask a question or describe a task…" title="Press Ctrl+L to focus this input">
+          <small id="composer-hint" class="composer-hint" aria-hidden="true">Ctrl+L focus</small>
+          <button type="submit" aria-label="Send message">↑</button>
+        </form>
+      </section>
+
+    </section>
+
+    <aside class="system-monitor-card card-layer" aria-label="System monitor">
+      <div class="system-monitor-head">
+        <span class="caption gold">SYSTEM MONITOR</span>
+        <span id="telemetry-state" class="system-monitor-sample" aria-live="polite">CHECKING TELEMETRY</span>
+      </div>
+      <div class="system-monitor-metrics">
+        <div class="system-metric"><span>CPU</span><strong id="cpu-value" aria-live="polite">—</strong></div>
+        <div class="system-metric"><span>GPU</span><strong id="gpu-value" aria-live="polite">—</strong></div>
+        <div class="system-metric"><span>Memory</span><strong id="memory-value" aria-live="polite">—</strong></div>
+      </div>
+      <div class="system-runtime" aria-label="Core runtime">
+        <div class="system-runtime-head"><span class="caption">RUNTIME</span><span class="system-runtime-mode">LOOPBACK</span></div>
+        <div class="system-runtime-statuses">
+          <div class="status offline"><i></i><span>Core</span><b id="core-status">Checking</b></div>
+          <div class="status ai"><i></i><span>AI</span><b id="ai-status">not_checked</b></div>
+        </div>
+        <dl class="system-runtime-details">
+          <dt>Connection</dt><dd id="connection-value">not checked</dd>
+          <dt>Model</dt><dd id="model-value">not reported</dd>
+        </dl>
+      </div>
+    </aside>
+
+    <main class="workspace core-layer">
+      <section class="core-stage" aria-label="JARVIS core visualization">
+        <div class="core-space">
+          <canvas id="core" role="img" aria-label="Animated golden spherical JARVIS core; local motion visualization"></canvas>
+          <div class="core-label"><span id="core-state">IDLE</span><small>SIMULATED ACTIVITY</small></div>
+        </div>
+        <aside id="token-usage-card" class="token-usage-card token-usage-preview" aria-label="JARVIS token usage preview">
+          <header class="token-usage-head">
+            <div><span class="caption gold">JARVIS USAGE</span><h2>Usage overview</h2></div>
+          </header>
+          <div class="token-usage-stats" aria-label="Token usage summary">
+            <div><strong id="token-usage-total">—</strong><span>Total tokens</span></div>
+            <div><strong id="token-usage-input">—</strong><span>Input tokens</span></div>
+            <div><strong id="token-usage-output">—</strong><span>Output tokens</span></div>
+          </div>
+          <p id="token-usage-status" class="token-usage-status" role="status" aria-live="polite">No JARVIS provider-reported usage yet.</p>
+        </aside>
+        <span id="quality" hidden>Full</span>
+        <span id="runtime-state" hidden>Running</span>
+        <div class="assistant-controls" aria-label="Animation controls">
+          <span>MOTION</span>
+          <button data-state="idle" aria-pressed="true">Idle</button>
+          <button data-state="thinking" aria-pressed="false">Thinking</button>
+          <button data-state="responding" aria-pressed="false">Responding</button>
+          <button data-state="offline" aria-pressed="false">Disconnected</button>
+          <button id="pause" aria-pressed="false">Pause</button>
+          <input id="reduced" type="checkbox" hidden aria-hidden="true">
+        </div>
+      </section>
+    </main>
+
+    <section class="dock-zone card-layer pages-collapsed" aria-label="Workspace tools">
+      <div class="dock-stack">
+        <button id="pages-toggle" class="pages-toggle" type="button" aria-expanded="false" aria-label="Expand Feature" title="Expand Feature">
+          <span class="pages-toggle-icon" aria-hidden="true">☷</span>
+          <span class="pages-toggle-label">Feature</span>
+        </button>
+        <div class="action-dock">
+        <div class="dock-head"><span class="caption">Feature</span><span class="dock-mark" aria-hidden="true">◆</span></div>
+        <nav class="dock-nav" aria-label="Workspace pages">
+          <button class="active" data-page="assistant" aria-label="Assistant" title="Assistant"><span class="nav-icon" aria-hidden="true">◉</span><span class="nav-label">Chat</span></button>
+          <button data-page="history" aria-label="Chat history" title="Chat history"><span class="nav-icon" aria-hidden="true">◴</span><span class="nav-label">History</span></button>
+          <button data-page="core" aria-label="Core connection" title="Core connection"><span class="nav-icon" aria-hidden="true">◎</span><span class="nav-label">Core</span></button>
+          <button data-page="tasks" aria-label="Tasks" title="Tasks"><span class="nav-icon" aria-hidden="true">⌘</span><span class="nav-label">Tasks</span></button>
+          <button data-page="tools" aria-label="Tool Results" title="Tool Results"><span class="nav-icon" aria-hidden="true">›_</span><span class="nav-label">Tools</span></button>
+          <button data-page="context" aria-label="Device" title="Device"><span class="nav-icon" aria-hidden="true">▦</span><span class="nav-label">Device</span></button>
+          <button data-page="working-context" aria-label="Working context (developer)" title="Working context (developer)"><span class="nav-icon" aria-hidden="true">⌘</span><span class="nav-label">Context</span></button>
+          <button data-page="connections" aria-label="AI connections" title="AI connections"><span class="nav-icon" aria-hidden="true">☷</span><span class="nav-label">AI</span></button>
+          <button data-page="usage" aria-label="Token usage" title="Token usage"><span class="nav-icon" aria-hidden="true">◫</span><span class="nav-label">Usage</span></button>
+          <button data-page="settings" aria-label="Settings" title="Settings"><span class="nav-icon nav-icon-svg" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6Z"/><path d="m19.4 15 .1.1a1.8 1.8 0 0 1-2.5 2.5l-.1-.1a1.8 1.8 0 0 0-3.1 1.3v.2a1.8 1.8 0 0 1-3.6 0v-.2a1.8 1.8 0 0 0-3.1-1.3l-.1.1a1.8 1.8 0 1 1-2.5-2.5l.1-.1a1.8 1.8 0 0 0-1.3-3.1h-.2a1.8 1.8 0 0 1 0-3.6h.2a1.8 1.8 0 0 0 1.3-3.1l-.1-.1a1.8 1.8 0 1 1 2.5-2.5l.1.1a1.8 1.8 0 0 0 3.1-1.3v-.2a1.8 1.8 0 0 1 3.6 0v.2a1.8 1.8 0 0 0 3.1 1.3l.1-.1a1.8 1.8 0 1 1 2.5 2.5l-.1.1a1.8 1.8 0 0 0 1.3 3.1h.2a1.8 1.8 0 0 1 0 3.6h-.2a1.8 1.8 0 0 0-1.3 3.1Z"/></svg></span><span class="nav-label">Settings</span></button>
+          <button data-page="memory" aria-label="Memory" title="Memory"><span class="nav-icon" aria-hidden="true">◇</span><span class="nav-label">Memory</span></button>
+          <button data-page="knowledge" aria-label="Knowledge" title="Knowledge"><span class="nav-icon" aria-hidden="true">▧</span><span class="nav-label">Knowledge</span></button>
+          <button data-page="theme" aria-label="Theme" title="Theme"><span class="nav-icon nav-icon-svg" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="9" cy="9" r="1.2" fill="currentColor"/><circle cx="14.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="16" cy="13.5" r="1.2" fill="currentColor"/><path d="M4 15.5c1.4-1.3 3-1.1 4.1.3 1.4 1.8 3 2.4 4.8 1.5 1.6-.8 2.9-.4 3.7.9"/></svg></span><span class="nav-label">Theme</span></button>
+          <button data-page="voice" aria-label="Voice" title="Voice"><span class="nav-icon" aria-hidden="true">♩</span><span class="nav-label">Voice</span></button>
+          <button data-page="automation" aria-label="Automation" title="Automation"><span class="nav-icon" aria-hidden="true">◷</span><span class="nav-label">Auto</span></button>
+          <button data-page="events" aria-label="Events" title="Events"><span class="nav-icon" aria-hidden="true">⊙</span><span class="nav-label">Events</span></button>
+          <button data-page="errors" aria-label="Errors" title="Errors"><span class="nav-icon" aria-hidden="true">!</span><span class="nav-label">Errors</span></button>
+          <button data-page="handoff" aria-label="Codex handoff" title="Codex handoff"><span class="nav-icon" aria-hidden="true">↗</span><span class="nav-label">Handoff</span></button>
+        </nav>
+        <div class="dock-key" aria-hidden="true">ESC · CLOSE</div>
+        </div>
+
+        <section id="inspect-panel" class="inspect-panel" aria-label="Workspace detail panel" hidden>
+        <header class="inspect-head">
+          <div class="inspect-title">
+            <div id="page-kicker" class="caption gold">WORKSPACE</div>
+            <h2 id="page-title">Tasks</h2>
+            <p id="page-subtitle">Review local work before it is acted on.</p>
+          </div>
+          <div class="inspect-actions">
+            <button id="pages-panel-toggle" class="pages-panel-toggle" type="button" aria-expanded="false" aria-label="Show Feature" title="Show Feature"><span aria-hidden="true">☷</span></button>
+            <button id="close-panel" class="panel-close" type="button" aria-label="Close workspace panel">×</button>
+          </div>
+        </header>
+        <div class="page-stack">
+          <section id="view-tasks" class="view panel-view">
+            <div class="subhead"><div><div class="caption gold">CORE TASKS</div><h2>Task lifecycle records.</h2><p>Read-only local records; active work is marked interrupted after a Core restart.</p></div><button id="tasks-refresh" class="button" type="button">Refresh</button></div>
+            <p id="tasks-status" class="settings-status" role="status" aria-live="polite">Waiting for Core.</p>
+            <div id="task-list" class="task-list" aria-live="polite"><div class="empty">Connect JARVIS Core to load task records.</div></div>
+          </section>
+
+          <section id="view-core" class="view panel-view" aria-label="Core connection">
+            <div class="subhead core-subhead"><div><div class="caption gold">CORE CONNECTION</div><h2>Keep the local Core reachable.</h2><p>Refresh checks the current loopback health. Reconnect reuses a healthy Core or starts only this shortcut's owned Core when the port is offline.</p></div><div class="instrument-actions core-actions" aria-label="Core connection controls"><button id="core-refresh" class="button" type="button">Refresh</button><button id="core-reconnect" class="button primary" type="button">Reconnect Core</button></div></div>
+            <article class="instrument"><h3>Core runtime</h3><div class="readout"><strong>Connection</strong><span id="core-connection-state">not loaded</span></div><div class="readout"><strong>Endpoint</strong><span>127.0.0.1:8765</span></div><div class="readout"><strong>Last check</strong><span id="core-connection-checked">not checked</span></div><p id="core-connection-status" class="settings-status" role="status" aria-live="polite">Waiting for Core health.</p><small>Health refreshes automatically every 2 seconds while this window is running. Refresh does not start a process; Reconnect uses the existing bounded Core supervisor. A non-ready listener remains an explicit conflict and is never killed.</small></article>
+          </section>
+
+          <section id="view-tools" class="view panel-view"><div class="subhead"><div><div class="caption gold">TOOL RESULTS · OWN SURFACE</div><h2>Results do not interrupt the conversation.</h2><p>Completed, denied, failed, and confirmation results from this window.</p></div><button id="tools-clear" class="button" type="button">Clear view</button></div><div id="tool-results-list" class="stack" aria-live="polite"><div id="tool-results-empty" class="empty">No tool result has been recorded in this window.</div></div></section>
+
+          <section id="view-context" class="view panel-view"><div class="subhead"><div><div class="caption gold">LOCAL SYSTEM INFO</div><h2>Read-only device information.</h2><p>Shows the small set of local system metrics JARVIS may describe. It does not capture the screen or control processes.</p></div><button id="system-info-refresh" class="button" type="button">Refresh</button></div><p id="system-info-status" class="settings-status" role="status" aria-live="polite">Waiting for Core.</p><article class="instrument"><h3>Battery diagnostics</h3><div class="readout"><strong>Battery</strong><span id="device-battery-availability">not loaded</span></div><div class="readout"><strong>Remaining capacity</strong><span id="device-battery-remaining-capacity">not loaded</span></div><div class="readout"><strong>Full-charge capacity</strong><span id="device-battery-full-charge-capacity">not loaded</span></div><div class="readout"><strong>Design capacity</strong><span id="device-battery-design-capacity">not loaded</span></div><div class="readout"><strong>Cycle count</strong><span id="device-battery-cycle-count">not loaded</span></div><p id="device-battery-detail-status" class="settings-status" role="status" aria-live="polite">Detailed battery data has not been loaded.</p></article><article class="instrument"><h3>System information</h3><pre id="system-info-result" class="surface-code">No system information loaded.</pre></article></section>
+
+          <section id="view-working-context" class="view panel-view"><div class="subhead"><div><div class="caption gold">WORKING CONTEXT</div><h2>Registered projects and safe inspection.</h2><p>Choose a registered project before requesting read-only file or Git information. Project context is not automatically sent with every chat message.</p></div></div><article class="instrument project-inspector"><div class="instrument-head"><h3>Registered projects</h3><div class="instrument-actions"><button id="projects-refresh" class="button" type="button">Refresh</button><button id="projects-rescan" class="button" type="button">Rescan</button></div></div><p id="projects-status" class="settings-status" role="status" aria-live="polite">Waiting for Core.</p><div id="project-list" class="project-list"><div class="empty">No project registry loaded.</div></div><div class="project-actions"><label>Project<select id="project-selector" aria-label="Registered project"></select></label><label>Path<input id="project-path" value="." autocomplete="off" aria-label="Project-relative path"></label><label>Keyword<input id="project-keyword" autocomplete="off" aria-label="Project search keyword"></label><div class="project-action-buttons"><button id="project-git-status" class="button" type="button">Git status</button><button id="project-list-files" class="button" type="button">List files</button><button id="project-read-file" class="button" type="button">Read file</button><button id="project-search" class="button" type="button">Search</button></div></div><pre id="project-result" class="surface-code">Select a project action to inspect its Core result.</pre></article></section>
+
+          <section id="view-connections" class="view panel-view">
+            <div class="subhead"><div><div class="caption gold">AI CONNECTIONS</div><h2>Core-ready is not AI-ready.</h2><p>ChatGPT subscription is checked without an inference probe. Direct providers are configured explicitly and are only verified when you send a message.</p></div></div>
+            <article class="instrument">
+              <h3>Available transport choices</h3>
+              <div class="readout"><strong>ChatGPT Subscription</strong><span id="managed-ai-status">not loaded</span></div>
+              <div class="readout"><strong>Direct API</strong><span id="direct-ai-status">not loaded</span></div>
+              <div class="readout"><strong>Selected provider / model</strong><span id="ai-model-value">not loaded</span></div>
+              <div class="setting-row compact-setting"><div class="setting-copy"><h3>Next request transport</h3><p>Selection changes Core policy only; it does not verify access or migrate context.</p></div><label class="setting-select"><span class="sr">AI transport mode</span><select id="ai-mode-setting" aria-label="AI transport mode"><option value="managed_subscription">ChatGPT subscription</option><option value="direct_api">Direct API</option></select></label></div>
+              <div class="readout connection-state"><strong>Current JARVIS connection</strong><span id="ai-connection-state" aria-live="polite">waiting for Core</span></div>
+              <div id="ai-connection-actions" class="connection-actions" hidden>
+                <button id="ai-reconnect" class="button primary" type="button" title="Check or reconnect the selected ChatGPT subscription">Refresh connection</button>
+                <label id="ai-direct-provider-row" class="connection-field" hidden><span>Direct provider</span><select id="ai-direct-provider" aria-label="Direct API provider"><option value="openai">OpenAI · Responses API</option><option value="gemini">Google Gemini · Interactions API</option><option value="deepseek">DeepSeek · Chat Completions</option><option value="openai_compatible">OpenAI-compatible gateway</option></select></label>
+                <label id="ai-direct-model-row" class="connection-field" hidden><span>Model ID</span><input id="ai-direct-model" type="text" autocomplete="off" value="gpt-5.6-luna" maxlength="128" aria-label="Direct API model ID"></label>
+                <label id="ai-direct-base-url-row" class="connection-field" hidden><span>Gateway base URL</span><input id="ai-direct-base-url" type="url" autocomplete="off" placeholder="https://gateway.example/v1" maxlength="250" aria-label="OpenAI-compatible gateway base URL"></label>
+                <input id="ai-direct-api-key" type="password" autocomplete="off" placeholder="Provider API key (kept in Core memory only)" aria-label="Provider API key" hidden>
+                <p id="ai-direct-provider-note" class="connection-note" hidden></p>
+                <button id="ai-api-connect" class="button primary" type="button" hidden>Connect selected provider</button>
+                <button id="ai-disconnect" class="button" type="button">Disconnect AI</button>
+              </div>
+              <section id="ai-compatible-models" class="model-catalog" aria-labelledby="ai-compatible-models-title" hidden>
+                <div class="model-catalog-head"><h3 id="ai-compatible-models-title">Compatible text model IDs</h3><span>access not verified</span></div>
+                <p id="ai-compatible-models-note">Choose from the provider's supported text models.</p>
+                <div id="ai-compatible-model-list" class="model-chip-list" aria-live="polite"></div>
+              </section>
+              <p id="ai-connection-status" class="settings-status" role="status" aria-live="polite">Waiting for Core health.</p>
+              <small>Keys are never read back, displayed, persisted, or sent until you submit a chat request. A gateway must explicitly implement the shown protocol; arbitrary API keys and models are not assumed compatible.</small>
+            </article>
+          </section>
+
+          <section id="view-usage" class="view panel-view" aria-label="Token usage">
+            <div class="subhead usage-subhead"><div><div class="caption gold">TOKEN USAGE</div><h2>Usage overview</h2><p>Managed ChatGPT account usage and Direct API response usage stay separate and are retained locally for this Electron edition.</p></div><div class="usage-head-actions"><span id="usage-live-badge" class="usage-live-badge">UNAVAILABLE</span><button id="usage-refresh" class="button" type="button">Refresh usage</button></div></div>
+            <article class="instrument usage-dashboard">
+              <div class="usage-summary" aria-label="Token usage summary">
+                <div><strong id="token-usage-page-total">—</strong><span>Total tokens</span></div>
+                <div><strong id="token-usage-page-input">—</strong><span>Input tokens</span></div>
+                <div><strong id="token-usage-page-output">—</strong><span>Output tokens</span></div>
+              </div>
+              <section class="usage-page-section" aria-labelledby="token-usage-page-activity-title">
+                <div class="usage-page-section-head"><h3 id="token-usage-page-activity-title">Token activity</h3><span>last 28 days</span></div>
+                <div id="token-usage-page-heatmap" class="token-usage-heatmap" role="img" aria-label="No token activity recorded"></div>
+              </section>
+              <section class="usage-page-section" aria-labelledby="token-usage-page-trend-title">
+                <div class="usage-page-section-head"><h3 id="token-usage-page-trend-title">Daily token trend</h3><span>last 14 days</span></div>
+                <div class="token-usage-chart-wrap usage-page-chart-wrap"><svg id="token-usage-page-chart" class="token-usage-chart" viewBox="0 0 360 112" role="img" aria-label="No token trend recorded"></svg></div>
+                <div class="token-usage-legend" aria-hidden="true"><span><i class="usage-swatch input"></i>Input</span><span><i class="usage-swatch output"></i>Output</span></div>
+              </section>
+              <p id="token-usage-page-status" class="token-usage-status" role="status" aria-live="polite">No provider-reported token usage yet.</p>
+            </article>
+          </section>
+
+          <section id="view-settings" class="view panel-view" aria-label="Settings">
+            <div class="subhead"><div><div class="caption gold">PREFERENCES</div><h2>Settings</h2><p>Local controls for this preview window.</p></div></div>
+            <div class="settings-list" aria-label="Local preferences">
+              <div class="setting-row">
+                <div class="setting-copy"><h3>Date language</h3><p>Choose the language used by the Chat card's local date.</p></div>
+                <label class="setting-select"><span class="sr">Date language</span><select id="locale-setting" aria-label="Date language"><option value="en-US">English</option><option value="zh-CN">中文</option></select></label>
+              </div>
+              <div class="setting-row">
+                <div class="setting-copy"><h3>Response language</h3><p>Choose the language JARVIS uses for new text replies. Existing history is not translated.</p></div>
+                <label class="setting-select"><span class="sr">Response language</span><select id="response-language-setting" aria-label="Response language"><option value="en">English</option><option value="zh-CN">中文</option></select></label>
+              </div>
+              <div class="setting-row">
+                <div class="setting-copy"><h3>Floating panel auto-close</h3><p>Close Pages and detail windows after no interaction. Scrolling the panel counts as activity.</p></div>
+                <label class="setting-select"><span class="sr">Floating panel auto-close</span><select id="panel-idle-setting" aria-label="Floating panel auto-close"><option value="5">5 seconds</option><option value="10">10 seconds</option><option value="25">25 seconds</option><option value="30">30 seconds</option><option value="60">60 seconds</option><option value="0">Never</option></select></label>
+              </div>
+              <div class="setting-row">
+                <div class="setting-copy"><h3>Core motion</h3><p>Low motion slows the Core rotation and page transitions while keeping the Core visibly moving.</p></div>
+                <label class="setting-toggle"><span class="sr">Low motion</span><input id="low-motion-setting" type="checkbox" aria-describedby="motion-status"><span class="toggle-track" aria-hidden="true"></span></label>
+              </div>
+              <div class="setting-row">
+                <div class="setting-copy"><h3>Automatic speech</h3><p>Read streamed replies and confirmation prompts through the selected Windows system voice. Text renders progressively; speech stays bounded to the current and next chunk.</p></div>
+                <label class="setting-toggle"><span class="sr">Automatic speech</span><input id="auto-speak-setting" type="checkbox" aria-describedby="auto-speak-status"><span class="toggle-track" aria-hidden="true"></span></label>
+              </div>
+              <div class="setting-row">
+                <div class="setting-copy"><h3>Windows voice</h3><p>Current Core speech configuration, read-only in this surface.</p></div>
+                <span id="speech-settings-value" class="setting-value">not loaded</span>
+              </div>
+              <div class="setting-row">
+                <div class="setting-copy"><h3>Run in background</h3><p>Closing this window hides JARVIS and keeps this app/Core process alive. Reopen the same shortcut to show it again.</p></div>
+                <label class="setting-toggle"><span class="sr">Run in background</span><input id="background-running-setting" type="checkbox" aria-describedby="runtime-settings-status"><span class="toggle-track" aria-hidden="true"></span></label>
+              </div>
+              <div class="setting-row">
+                <div class="setting-copy"><h3>Start on login</h3><p>Launch JARVIS when you sign in to Windows. It is independent from the background-running choice.</p></div>
+                <label class="setting-toggle"><span class="sr">Start on login</span><input id="start-on-login-setting" type="checkbox" aria-describedby="runtime-settings-status"><span class="toggle-track" aria-hidden="true"></span></label>
+              </div>
+            </div>
+            <p id="locale-status" class="settings-status" role="status" aria-live="polite">English date format · active.</p>
+            <p id="response-language-status" class="settings-status" role="status" aria-live="polite">English replies · active for new messages.</p>
+            <p id="panel-idle-status" class="settings-status" role="status" aria-live="polite">5s · panels close after no interaction.</p>
+            <p id="motion-status" class="settings-status" role="status" aria-live="polite">Standard motion · Core rotation follows activity.</p>
+            <p id="auto-speak-status" class="settings-status" role="status" aria-live="polite">Off · new replies stay text-only.</p>
+            <p id="speech-settings-status" class="settings-status" role="status" aria-live="polite">Waiting for Core speech settings.</p>
+            <p id="runtime-settings-status" class="settings-status" role="status" aria-live="polite">Background off · start on login off.</p>
+            <div class="empty settings-note">No per-message read buttons are used. Turning this off stops current automatic speech and clears queued replies; text responses remain unchanged.</div>
+          </section>
+
+          <section id="view-memory" class="view panel-view" aria-label="Memory"><div class="subhead"><div><div class="caption gold">MEMORY</div><h2>Conversation memory stays inspectable.</h2><p>Read-only view of the conversation history held by the local Core runtime.</p></div><button id="memory-refresh" class="button" type="button">Refresh</button></div><article class="instrument"><h3>Conversation history</h3><p id="history-status" class="settings-status" role="status" aria-live="polite">Waiting for Core.</p><div id="history-list" class="history-list"><div class="empty">No history loaded.</div></div></article></section>
+
+          <section id="view-history" class="view panel-view" aria-label="Chat history"><div class="subhead history-subhead"><div><div class="caption gold">CHAT HISTORY</div><h2>Open a saved local conversation.</h2><p>Each launch starts a new chat. Use Open chat only when you explicitly want to continue a saved local conversation.</p></div><div class="instrument-actions history-actions"><button id="history-refresh" class="button" type="button">Refresh</button><button id="history-new" class="button primary" type="button">Start new chat</button></div></div><p id="conversations-status" class="settings-status history-status" role="status" aria-live="polite">Waiting for Core.</p><div id="conversation-list" class="conversation-list" aria-live="polite"><div class="empty">No saved chats loaded.</div></div></section>
+
+          <section id="view-knowledge" class="view panel-view" aria-label="Knowledge"><div class="subhead"><div><div class="caption gold">KNOWLEDGE</div><h2>Named knowledge sources stay inspectable.</h2><p>Check, connect, and disconnect registered Obsidian metadata without scanning a path from this page.</p></div><button id="knowledge-refresh" class="button" type="button" title="Check Obsidian registration">Refresh connection</button></div><article class="instrument"><h3>Obsidian vaults</h3><p id="vault-status" class="settings-status" role="status" aria-live="polite">Waiting for Core.</p><div id="vault-list" class="vault-list"><div class="empty">No vault metadata loaded.</div></div><div id="obsidian-connection-actions" class="connection-actions" aria-label="Obsidian connection controls"><label class="connection-field"><span>Vault name</span><input id="obsidian-vault-name" type="text" maxlength="200" autocomplete="off" placeholder="JARVIS Wiki"></label><label class="connection-field"><span>Vault folder path</span><input id="obsidian-vault-path" type="text" maxlength="1000" autocomplete="off" placeholder="C:\Users\...\Obsidian Vault"></label><button id="obsidian-connect" class="button primary full-row" type="button">Connect / reconnect Obsidian</button><p id="obsidian-connection-status" class="connection-note" role="status" aria-live="polite">Enter a vault name and full folder path to connect or reconnect. JARVIS never deletes vault files.</p></div><small>Registration, removal, reindex, and note opening remain explicit Core API actions; this view never scans a path.</small></article></section>
+
+          <section id="view-theme" class="view panel-view" aria-label="Theme"><div class="subhead"><div><div class="caption gold">VISUAL SYSTEM · THEME</div><h2>Choose the Core atmosphere.</h2><p>Change the local palette without changing runtime, Core, AI, or permission behavior.</p></div></div><div class="settings-list" aria-label="Theme preferences"><div class="setting-row"><div class="setting-copy"><h3>Visual theme</h3><p>Apply one high-tech palette to the Core and floating cards.</p></div><label class="setting-select"><span class="sr">Visual theme</span><select id="theme-setting" aria-label="Visual theme"><option value="amber">Amber Core</option><option value="cyan">Cyan Circuit</option><option value="violet">Violet Pulse</option><option value="matrix">Matrix Green</option></select></label></div></div><p id="theme-status" class="settings-status" role="status" aria-live="polite">Amber Core · active in this window.</p><div class="split theme-notes"><article class="instrument"><h3>Core palette</h3><p>Shader colors, orbit lines, and state labels follow the selected accent.</p></article><article class="instrument"><h3>Surface palette</h3><p>Chat, Pages, monitor, and inspector cards share the same local token set.</p></article><article class="instrument"><h3>Local only</h3><p>Theme selection is saved in this preview window and never changes Core/API state.</p></article></div></section>
+
+          <section id="view-voice" class="view panel-view" aria-label="Voice">
+            <div class="subhead voice-subhead"><div><div class="caption gold">VOICE</div><h2>Choose a Windows voice package.</h2><p>Automatic speech uses the installed Windows system voices. Select one here once; the choice is kept in this local edition and used for future replies.</p></div></div>
+            <div class="instrument-actions voice-actions" aria-label="Voice actions"><button id="voice-refresh" class="button" type="button">Refresh voices</button><button id="voice-test" class="button primary" type="button">Test voice</button></div>
+            <div class="split voice-layout">
+              <article class="instrument">
+                <h3>Installed Windows voices</h3>
+                <label class="connection-field"><span>Voice package</span><select id="voice-package-setting" aria-label="Windows voice package"><option value="">Use Windows default</option></select></label>
+                <p id="voice-package-status" class="settings-status" role="status" aria-live="polite">Waiting for Core voice packages.</p>
+                <div class="readout"><strong>Selected output</strong><span id="voice-output-value">not loaded</span></div>
+                <div class="readout"><strong>Source</strong><span id="voice-source-value">not loaded</span></div>
+              </article>
+              <aside class="instrument">
+                <h3>Automatic speech</h3>
+                <p>Read streamed replies and confirmation prompts with the selected Windows voice. Text remains available even when speech is off.</p>
+                <label class="setting-toggle voice-auto-toggle"><span class="sr">Automatic speech</span><input id="voice-auto-speech-setting" type="checkbox" aria-describedby="voice-auto-speech-status"><span class="toggle-track" aria-hidden="true"></span></label>
+                <p id="voice-auto-speech-status" class="settings-status" role="status" aria-live="polite">Off · new replies stay text-only.</p>
+                <small id="voice-status">Windows voice packages are read from the local Core speech boundary; microphone input is not requested.</small>
+              </aside>
+            </div>
+          </section>
+
+          <section id="view-automation" class="view panel-view"><div class="subhead"><div><div class="caption gold">AUTOMATION</div><h2>Draft routines require review.</h2><p>No schedule, action, or external notification is created from this surface.</p></div><button class="button" data-demo="Create automation proposal">＋ Draft routine</button></div><div class="task-list"><article class="task-row"><i class="dot dim"></i><div><h3>Daily workspace digest</h3><p>Example: summarize an explicitly selected source.</p></div><span class="tag">DRAFT</span><span class="task-meta">No schedule</span><button class="inline-action" data-demo="Review daily digest">Review →</button></article><article class="task-row"><i class="dot dim"></i><div><h3>Monitor failed runs</h3><p>Example notification policy with no recipient.</p></div><span class="tag">DRAFT</span><span class="task-meta">No recipient</span><button class="inline-action" data-demo="Review run monitor">Review →</button></article></div></section>
+
+          <section id="view-events" class="view panel-view" aria-label="Events"><div class="subhead"><div><div class="caption gold">EVENTS</div><h2>Runtime events remain visible.</h2><p>Informational lifecycle and recovery signals from this window are retained here.</p></div><button id="events-clear" class="button" type="button">Clear events</button></div><div id="event-list" class="stack" aria-live="polite"><div class="empty">No runtime event recorded.</div></div></section>
+
+          <section id="view-errors" class="view panel-view" aria-label="Errors"><div class="subhead"><div><div class="caption gold">ERRORS</div><h2>Failures stay explicit.</h2><p>Bridge, Core, and surface errors from this window are retained here.</p></div><button id="errors-clear" class="button" type="button">Clear errors</button></div><div id="error-list" class="stack" aria-live="polite"><div class="empty">No runtime error recorded.</div></div></section>
+
+          <section id="view-handoff" class="view panel-view"><div class="subhead"><div><div class="caption gold">CODEX HANDOFF</div><h2>Authorization belongs to the user.</h2><p>A future engineering handoff should show its target and scope first.</p></div><button class="button primary" data-demo="Prepare handoff proposal">Prepare proposal</button></div><div class="split"><article class="instrument"><h3>Handoff package</h3><div class="readout"><strong>Target task</strong><span>not selected</span></div><div class="readout"><strong>Files included</strong><span>none</span></div><div class="readout"><strong>Git state</strong><span>not inspected</span></div><div class="readout"><strong>Authorization</strong><span>not granted</span></div></article><aside class="instrument"><h3>What this would do</h3><p>It would summarize an explicit scope and wait for confirmation. This prototype does not start, interrupt, or transfer another task.</p><small>USER-VISIBLE CONFIRMATION REQUIRED</small></aside></div></section>
+
+        </div>
+        </section>
+      </div>
+
+    </section>
+  </div>
+
+  <div id="demo-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div class="modal-card"><div class="caption gold">LOCAL PROTOTYPE</div><h2 id="modal-title">Demo interaction</h2><p id="modal-copy"></p><footer><button class="button" data-close>Close</button></footer></div></div>
+  <script src="hologram.js"></script>
+  <script src="conversation-store.js"></script>
+  <script src="composer-behavior.js"></script>
+  <script src="response-stream.js"></script>
+  <script src="auto-speech.js"></script>
+  <script src="markdown-renderer.js"></script>
+  <script src="unified.js"></script>
+</body>
+</html>
