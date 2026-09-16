@@ -2,13 +2,30 @@ JARVIS — Local-first Windows AI Assistant
 
 JARVIS — 本地优先的 Windows AI 助手
 
-JARVIS is an open-source, local-first Windows personal AI assistant.
+JARVIS is an open-source, local-first Windows personal AI assistant designed around strict separation of intelligence, control, execution, personal data, structured knowledge, and engineering authority.
 
-Its architecture separates intelligence, policy, execution, personal data, structured knowledge, and engineering escalation into independent authorities instead of allowing one AI model to control the entire system.
+JARVIS 是一个开源、本地优先的 Windows 个人 AI 助手。系统通过明确边界，将智能、控制、执行、个人数据、结构化知识及工程权限分离。
 
-JARVIS 是一个开源、本地优先的 Windows 个人 AI 助手。
+AI can propose actions, but JARVIS Core decides what is allowed to execute.
+AI 可以提出操作，但最终是否允许执行由 JARVIS Core 决定。
 
-其架构将 智能、策略控制、执行、个人数据、结构化知识和工程升级路径 分离为不同的权威模块，而不是让单一 AI 模型直接控制整个系统。
+⸻
+
+Table of Contents / 目录
+
+1. Overview / 项目概览
+2. Internal Test / 当前内测版本
+3. Current Capabilities / 当前能力
+4. Installation & Development / 安装与开发
+5. Architecture & Security / 架构与安全
+6. Roadmap / 路线图
+7. Contributing & License / 贡献与许可证
+
+⸻
+
+1. Overview / 项目概览
+
+1.1 Authority Model / 权威模型
 
 Selected AI Provider / Model
         ↓
@@ -33,49 +50,63 @@ Codex Handoff
 Authorized Engineering Escalation
 授权后的工程升级路径
 
-JARVIS follows a simple rule: AI can propose actions, but Core decides what is allowed to execute.
-
-JARVIS 遵循一个核心原则：AI 可以提出操作，但最终是否允许执行由 Core 决定。
+Authority / 权威	Responsibility / 职责
+Selected AI	Reasoning and language intelligence / 推理与语言智能
+JARVIS Core	Policy, routing, permissions and lifecycle control / 策略、路由、权限和生命周期控制
+Python Tools	Bounded system execution / 有界系统执行
+Local Storage	Personal and operational runtime data / 个人与运行数据
+Obsidian	Optional structured knowledge / 可选结构化知识
+Codex Handoff	Authorized engineering escalation / 授权工程升级
 
 ⸻
 
-Current Milestone / 当前里程碑
+1.2 Editions / 版本
 
-The current public-facing milestone is:
+Edition / 版本	Purpose / 用途	Available Surfaces / 页面
+JARVIS Internal Test	Completed tester-facing capabilities / 已完成、供测试者使用的功能	Assistant, History, Core, Tool Results, Device, AI Connections, Usage, Settings, Memory, Knowledge, Theme, Voice, Events, Errors
+JARVIS Development	Active development and future capability validation / 开发中功能和未来能力验证	Internal Test + Tasks, Working Context, Automation, Codex Handoff development surfaces
+
+Both editions share the same architecture and Core contracts.
+
+Internal Test not only hides unfinished navigation, but also blocks direct access to unfinished development routes.
+
+两个版本共享相同架构与 Core contracts。
+
+Internal Test 不只隐藏尚未完成的页面入口，也会阻止直接访问相关开发路由。
+
+⸻
+
+2. Internal Test / 当前内测版本
+
+2.1 Current Milestone / 当前里程碑
 
 JARVIS Internal Test v0.1.0
 
-The Internal Test edition packages:
+The current Internal Test packages the following components into one Windows installer:
 
 * Electron desktop application
 * Local Python / FastAPI JARVIS Core
-* Windows tool adapters
+* Windows platform adapters
 * Bundled Windows x64 Codex CLI
 * Codex App Server transport
 * Local configuration and runtime storage
 
-into a single Windows installer.
-
-当前公开测试里程碑为：
-
-JARVIS Internal Test v0.1.0
-
-内测版将以下组件封装进一个 Windows 安装器：
+当前 Internal Test 将以下组件封装为一个 Windows 安装器：
 
 * Electron 桌面端
 * 本地 Python / FastAPI JARVIS Core
-* Windows 工具适配层
+* Windows Platform Adapter
 * 内置 Windows x64 Codex CLI
 * Codex App Server transport
 * 本地配置与运行数据存储
 
 Unfinished product surfaces are excluded from the Internal Test edition.
 
-尚未完成的产品页面不会进入 Internal Test 版本。
+尚未完成的产品页面不会进入 Internal Test。
 
 ⸻
 
-Internal Test Status / 内测状态
+2.2 Release Status / 发布状态
 
 Release: v0.1.0 GitHub Pre-release
 
@@ -99,45 +130,53 @@ The installer is currently unsigned, so Windows may display SmartScreen or appli
 
 最终重封安装包已经发布为 GitHub Pre-release。
 
-目前仍未完成独立干净 Windows 环境的安装验收。
+目前仍未完成独立干净 Windows 环境验收。
 
 安装器尚未进行代码签名，因此 Windows 可能显示 SmartScreen 或应用控制警告。
 
 This is an internal pre-release, not a stable production release.
-
 当前版本属于内测预发布版本，不是稳定生产版本。
 
 ⸻
 
-Editions / 版本
+2.3 Known Limitations / 已知限制
 
-Edition / 版本	Purpose / 用途	Available Pages / 页面
-JARVIS Internal Test	Completed tester-facing capabilities / 已完成、可供测试者使用的功能	Assistant, History, Core, Tool Results, Device, AI Connections, Usage, Settings, Memory, Knowledge, Theme, Voice, Events, Errors
-JARVIS Development	Active development and future-feature validation / 开发中功能与未来能力验证	Internal Test pages + Tasks, Working Context, Automation, Codex Handoff development surfaces
+Current known limitations include:
 
-Both editions share the same architecture and Core contracts.
-
-Internal Test does not only hide unfinished navigation. Direct access to unfinished development routes is also blocked.
-
-两个版本共享相同的架构与 Core contracts。
-
-Internal Test 不只是隐藏尚未完成的导航入口，同时也会阻止直接访问对应的开发路由。
+* Clean Windows machine installer acceptance is pending.
+* Installer is not code-signed.
+* Target SQLite operational-memory migration is incomplete.
+* Target persistent task architecture is incomplete.
+* Wake Word is not yet a completed Internal Test capability.
+* Microphone STT is not yet complete.
+* Voice Interrupt is not yet complete.
+* Full Automation Engine is not yet complete.
+* Proactive assistance is not yet complete.
+* Full Screen Awareness is not yet complete.
+* Codex Handoff is not yet complete.
+* Full Knowledge Manager governance is not yet complete.
+* End-to-end RAG acceptance remains future work.
+* Hardware metrics depend on device support.
+* Unsupported hardware values must report unavailable.
+* AI availability depends on provider, account access, model availability, quota and network.
 
 ⸻
 
-Current Features / 当前功能
+3. Current Capabilities / 当前能力
 
-Assistant and Core / 助手与 Core
+3.1 Assistant & Core / 助手与 Core
 
-* Starts or reuses the local Core at 127.0.0.1:8765.
-* Reports Core health separately from AI availability.
-* Supports multi-turn conversations.
-* Allows explicit reopening of saved local conversations.
-* Streams AI responses when supported by the selected provider.
-* Renders a constrained and safe Markdown subset.
-* Preserves truthful execution states.
+The current Core can:
 
-Supported states include:
+* Start or reuse the local Core at 127.0.0.1:8765
+* Report Core health separately from AI availability
+* Support multi-turn conversations
+* Reopen saved local conversations
+* Stream AI responses when supported
+* Render a constrained safe Markdown subset
+* Preserve truthful execution state
+
+Supported execution states include:
 
 completed
 failed
@@ -145,17 +184,17 @@ awaiting_confirmation
 denied
 session_busy
 
-JARVIS does not convert failures, denials, or confirmation requirements into fake success states.
+JARVIS does not convert failure, denial or confirmation requirements into fake success states.
 
-JARVIS 不会把失败、拒绝或等待确认状态包装成成功。
+JARVIS 不会将失败、拒绝或等待确认状态包装成成功。
 
 ⸻
 
-Bounded Windows Tools / 有界 Windows 工具
+3.2 Windows Tools / Windows 工具
 
-JARVIS exposes Windows capabilities through explicitly registered tools instead of unrestricted shell access.
+JARVIS exposes Windows capabilities through explicitly registered tools rather than unrestricted shell access.
 
-Current tool categories include:
+Current categories include:
 
 * System information
 * Battery information
@@ -172,9 +211,9 @@ Current tool categories include:
 * Clipboard operations
 * Wallpaper management
 * Window management
-* Selected keyboard and mouse actions
+* Selected keyboard and mouse operations
 
-Higher-risk operations such as:
+Higher-risk actions such as:
 
 Sleep
 Restart
@@ -182,17 +221,13 @@ Shutdown
 
 require explicit user confirmation.
 
-The AI model does not receive unrestricted Shell or administrator authority.
+The AI does not receive unrestricted shell or administrator authority.
 
-Execution remains inside JARVIS Core policy.
-
-JARVIS 通过明确注册的工具暴露 Windows 能力，而不是直接给予 AI 无限 Shell 权限。
-
-所有实际执行仍受 Core 的权限与策略控制。
+所有实际操作仍由 JARVIS Core 控制。
 
 ⸻
 
-Desktop Experience / 桌面体验
+3.3 Desktop Experience / 桌面体验
 
 The Electron desktop currently provides:
 
@@ -205,16 +240,16 @@ The Electron desktop currently provides:
 * Low Motion mode
 * Background mode
 * Optional start-on-login
-* Live hardware/system information when available
+* Live hardware information when supported
 * Tool Results surface
 * Events surface
 * Errors surface
 * Windows OneCore voice support
 * Optional automatic reading of new replies
-* JARVIS-only token usage when providers report real usage
+* JARVIS-only token usage when provider usage data is available
 * GitHub Release update checking
 
-Custom theme values are persisted locally for:
+Custom theme values include:
 
 background
 surface
@@ -225,29 +260,21 @@ muted text
 Core A
 Core B
 
-Users can reset customized colors back to a preset theme.
-
-Update checking only reports available trusted releases.
-
-Downloading and installing updates remain explicit user actions.
-
 ⸻
 
-AI Connections / AI 连接
+3.4 AI Connections / AI 连接
 
 JARVIS never bundles developer credentials.
 
 Every tester must use their own account or API key.
 
-JARVIS 不会把开发者自己的账号凭据或 API Key 打包进安装器。
-
-每位测试者必须使用自己的账号或 Key。
+JARVIS 不会将开发者凭据打包进安装器。
 
 ⸻
 
-Managed ChatGPT Connection / ChatGPT 管理连接
+3.4.1 Managed ChatGPT Connection
 
-The current ChatGPT connection uses:
+Current transport:
 
 JARVIS
     ↓
@@ -257,51 +284,26 @@ Bundled Windows x64 Codex CLI
     ↓
 Official user authentication
 
-The Codex CLI is the bundled runtime component.
+The bundled Codex CLI is the runtime component.
 
-Codex App Server is the transport/protocol used by JARVIS to communicate with that component.
+Codex App Server is the communication transport used by JARVIS.
 
 They are not separate AI providers.
 
-Connection Flow / 连接流程
+Connection verification requires a real non-fixed message.
 
-1. Select ChatGPT Subscription.
-2. Start the JARVIS-managed sign-in flow.
-3. Complete official browser authentication using your own account.
-4. Return to JARVIS.
-5. Check the reported account/model state.
-6. Send a normal, non-fixed message.
-7. Confirm that a real response is returned.
-
-A selected model name is not proof of connectivity.
-
-实际选择了模型名称，并不代表连接已经成功。
-
-必须发送一条真实的普通消息并成功获得回复，才能认为 AI 路径已经通过验证。
-
-Disconnecting JARVIS only stops JARVIS from using its managed transport.
-
-It must not silently sign the user out of unrelated Codex clients.
+A selected model name alone is not proof of connectivity.
 
 ⸻
 
-Direct API / API 直连
+3.4.2 Direct API
 
-Supported connection categories currently include:
+Current supported provider categories:
 
 * OpenAI
 * Gemini
 * DeepSeek
 * Supported OpenAI-compatible endpoints
-
-Connection Flow / 连接流程
-
-1. Select Direct API.
-2. Select the provider.
-3. Enter required endpoint and model information.
-4. Enter your own API key.
-5. Send a normal question.
-6. Verify the real provider response.
 
 Possible failures remain explicit:
 
@@ -314,17 +316,15 @@ Invalid endpoint
 
 JARVIS does not silently switch providers.
 
-API requests may incur provider charges.
-
 ⸻
 
-Local Data / 本地数据
+3.5 Local Data / 本地数据
 
-Internal Test writable application data is stored under:
+Internal Test writable data is stored under:
 
 %LOCALAPPDATA%\JARVIS\InternalTest
 
-Local data can include:
+Local data may include:
 
 * Conversations
 * Settings
@@ -332,7 +332,7 @@ Local data can include:
 * Usage records
 * Tool results
 * Events
-* Error records
+* Errors
 * Existing memory records
 * Runtime/task records generated by Core
 
@@ -340,19 +340,15 @@ Unfinished task runs are not silently resumed after restart.
 
 ⸻
 
-Memory Status / Memory 当前状态
+3.6 Memory / 记忆
 
-The Internal Test edition already exposes a Memory surface and existing local memory/runtime records.
-
-However, the target operational-memory architecture is not yet complete.
-
-Current:
+Current
 
 Memory UI
 Existing local records
 Runtime memory behavior
 
-Target:
+Target
 
 SQLite MemoryStore
 User Model
@@ -361,11 +357,11 @@ Memory Review
 Context Builder integration
 Migration and recovery rules
 
-This distinction prevents the existence of a Memory page from being interpreted as completion of the full target Memory architecture.
+The existence of the Memory page does not mean the final target Memory architecture is complete.
 
 ⸻
 
-Obsidian / 可选结构化知识
+3.7 Knowledge & Obsidian / 知识与 Obsidian
 
 Obsidian is optional.
 
@@ -377,7 +373,7 @@ It is not required for:
 * Settings
 * Local conversations
 
-JARVIS treats personal runtime data and structured knowledge as separate authorities.
+Authority separation:
 
 Local Storage
     ↓
@@ -386,58 +382,28 @@ Obsidian Vault
     ↓
 Structured knowledge
 
-Disconnecting a Vault removes JARVIS access but does not delete the original notes.
+Disconnecting a Vault removes JARVIS access without deleting original notes.
 
-⸻
-
-Safe Obsidian Test / 安全测试
-
-For testing:
-
-1. Create a temporary Vault.
-2. Use non-private Markdown notes.
-3. Open Knowledge.
-4. Enter a Vault name.
-5. Enter the full Vault folder path.
-6. Connect the Vault.
-7. Refresh.
-8. Verify the registered source.
-9. Disconnect.
-10. Confirm that the original files still exist.
-11. Restart JARVIS.
-12. Confirm that the disconnected Vault is not accessed automatically.
-
-Important:
+Registration, indexing, retrieval and AI usage are different stages:
 
 Registered
 ≠ Indexed
 ≠ Retrieved
 ≠ Used by AI
 
-Vault registration, indexing, retrieval, and AI usage are separate outcomes.
-
-路径注册成功并不代表：
-
-* 已完成索引
-* 已被检索
-* 已经进入 AI Context
-* 已被 AI 实际使用
-
 ⸻
 
-Events Status / Events 当前状态
+3.8 Events / 事件
 
-The current Internal Test edition contains an Events surface for recorded runtime events.
+The current Internal Test includes an Events surface for recorded runtime events.
 
-This does not mean that the full target Event Bus architecture is complete.
-
-Current:
+Current
 
 Runtime event records
 Events UI
 Basic observability
 
-Future:
+Target
 
 Event Bus
 Publish / Subscribe
@@ -447,38 +413,33 @@ Proactive triggers
 Presence events
 Automation integration
 
+The current Events page does not mean the full Event Bus architecture is complete.
+
 ⸻
 
-Requirements / 系统要求
+4. Installation & Development / 安装与开发
 
-Internal Test Users / 内测用户
+4.1 User Requirements / 用户系统要求
 
-Required:
+Internal Test requires:
 
 * Windows 10 or Windows 11
 * x64 architecture
 * GPU/driver capable of running the Electron WebGL surface
-
-Internet is required when using cloud AI providers.
-
-AI access requires either:
-
-* a ChatGPT account with supported Codex access, or
-* a personal API key for a supported provider
+* Internet access when using cloud AI providers
+* A supported ChatGPT/Codex account or supported API provider credentials
 
 Obsidian is optional.
 
-The Obsidian application does not need to remain open when registering an existing Vault directory.
-
 ⸻
 
-Bundled Runtime / 已包含运行环境
+4.2 Bundled Runtime / 已包含运行环境
 
-Internal Test includes:
+Internal Test already includes:
 
 * Application runtime
 * Python Core
-* Windows x64 Codex CLI transport runtime
+* Windows x64 Codex CLI runtime
 
 Testers do not need to separately install:
 
@@ -490,7 +451,30 @@ Codex CLI
 
 ⸻
 
-Source Development / 源码开发
+4.3 Install / 安装
+
+Current installer artifact:
+
+electron_motion_preview_internal_test\
+└─ release\
+   └─ JARVIS-Internal-Test-0.1.0-Setup.exe
+
+Installation flow:
+
+1. Run JARVIS-Internal-Test-0.1.0-Setup.exe
+2. Choose an installation directory
+3. Complete installation
+4. Launch JARVIS Internal Test
+5. Open Core
+6. Confirm Core reports ready
+7. Open AI Connections
+8. Configure one connection
+9. Send a real message
+10. Confirm a real provider response
+
+⸻
+
+4.4 Source Development / 源码开发
 
 Development requirements:
 
@@ -507,32 +491,7 @@ Flutter is not required for the Electron Internal Test edition.
 
 ⸻
 
-Install / 安装
-
-Current installer artifact:
-
-electron_motion_preview_internal_test\
-└─ release\
-   └─ JARVIS-Internal-Test-0.1.0-Setup.exe
-
-Installation
-
-1. Run JARVIS-Internal-Test-0.1.0-Setup.exe.
-2. Choose an installation directory.
-3. Complete installation.
-4. Launch JARVIS Internal Test from Desktop or Start.
-5. Open Core.
-6. Confirm Core reports ready.
-7. Open AI Connections.
-8. Configure one AI connection.
-9. Send a normal message.
-10. Confirm a real provider response.
-
-The unsigned installer may trigger Windows SmartScreen or application-control warnings.
-
-⸻
-
-Build from Source / 从源码构建
+4.5 Build from Source / 从源码构建
 
 git clone https://github.com/Justin11-13/JARVIS_Local_AI.git
 cd JARVIS_Local_AI
@@ -543,7 +502,7 @@ npm ci
 npm run verify:static
 npm run package:win
 
-The build pipeline produces:
+Build pipeline:
 
 Python source
     ↓
@@ -559,7 +518,7 @@ Generated dependencies and build outputs are not source authority.
 
 ⸻
 
-Edition Source Directories / 版本源码目录
+4.6 Source Directories / 源码目录
 
 Development edition:
 
@@ -569,15 +528,13 @@ Internal Test edition:
 
 electron_motion_preview_internal_test/
 
-Edition-specific runtime behavior must use the repository’s defined startup scripts and edition configuration.
-
-Directory names themselves are not executable commands.
+Directory names are source locations, not executable commands.
 
 ⸻
 
-Verification / 验证
+4.7 Verification / 验证
 
-Internal Test static verification:
+Static verification:
 
 cd electron_motion_preview_internal_test
 npm run verify:static
@@ -586,26 +543,26 @@ Node regression tests:
 
 node --test test\*.cjs
 
-Python regression tests are located under:
+Python regression tests are under:
 
 tests/
 
-Static tests verify source-level expectations.
-
-They do not prove:
+Static tests do not prove:
 
 * rendered UI correctness
 * WebGL runtime behavior
 * installer behavior
 * clean-machine compatibility
 * provider connectivity
-* OS-specific behavior
+* OS-specific runtime behavior
 
-Those require real runtime acceptance testing.
+These require runtime acceptance testing.
 
 ⸻
 
-Architecture / 架构
+5. Architecture & Security / 架构与安全
+
+5.1 Runtime Architecture / 运行架构
 
 Electron Desktop
         ↓
@@ -625,14 +582,9 @@ Local Storage
 Obsidian
 Selected AI Provider
 
-Authoritative architecture documents:
+⸻
 
-TARGET_ARCHITECTURE.md
-CURRENT_STATE.md
-AGENTS.md
-docs/INDEX.md
-
-Authority Model
+5.2 Documentation Authority / 文档权威关系
 
 TARGET_ARCHITECTURE.md
 → target system design
@@ -640,42 +592,42 @@ CURRENT_STATE.md
 → current implementation truth
 AGENTS.md
 → engineering rules
+docs/INDEX.md
+→ documentation index
 README.md
 → public-facing overview
 
-README must never claim a capability that is not supported by the current implementation state.
+README must never claim capabilities not supported by the current implementation state.
 
 ⸻
 
-Security Boundary / 安全边界
-
-JARVIS currently applies multiple security boundaries.
+5.3 Security Boundary / 安全边界
 
 Local API
 
-The Core API binds to loopback only.
+The Core API binds to:
 
 127.0.0.1
 
-Loopback reduces network exposure, but loopback alone is not treated as complete authorization.
+Loopback reduces network exposure, but loopback alone is not treated as authorization.
 
-Core security must also rely on:
+Core security also depends on:
 
-* tool validation
-* argument validation
-* permission policy
-* confirmation requirements
-* renderer bridge restrictions
-* explicit failure
-* fail-closed behavior
+* Tool validation
+* Argument validation
+* Permission policy
+* Confirmation requirements
+* Renderer bridge restrictions
+* Explicit failures
+* Fail-closed behavior
 
 ⸻
 
 Electron Boundary
 
-The renderer accesses privileged functionality through a constrained preload bridge.
+Renderer access to privileged functionality goes through a constrained preload bridge.
 
-The renderer does not receive unrestricted Node.js or system authority.
+The renderer does not receive unrestricted Node.js or operating-system authority.
 
 ⸻
 
@@ -683,18 +635,18 @@ Tool Boundary
 
 Core validates:
 
-* tool names
-* tool arguments
-* permission requirements
-* execution state
+Tool name
+Arguments
+Permission requirements
+Execution state
 
-Higher-risk actions require explicit user confirmation.
+Higher-risk operations require confirmation.
 
 ⸻
 
 Packaging Boundary
 
-Release packages must exclude developer-specific or private data, including:
+Release packages must exclude:
 
 .env
 API keys
@@ -710,10 +662,10 @@ Failure Policy
 
 JARVIS does not silently fall back between:
 
-* AI providers
-* databases
-* tools
-* legacy implementations
+AI providers
+Databases
+Tools
+Legacy implementations
 
 Errors remain observable.
 
@@ -721,42 +673,17 @@ Security failures fail closed.
 
 ⸻
 
-Known Limitations / 已知限制
-
-Current known limitations include:
-
-* Clean Windows machine installer acceptance is pending.
-* Installer is not code-signed.
-* Target SQLite operational-memory migration is incomplete.
-* Target persistent task architecture is incomplete.
-* Wake Word is not a completed Internal Test capability.
-* Microphone STT is not a completed Internal Test capability.
-* Voice Interrupt is not a completed Internal Test capability.
-* Full Automation Engine is not complete.
-* Proactive assistance is not complete.
-* Full Screen Awareness is not complete.
-* Codex Handoff is not complete.
-* Full Knowledge Manager governance is not complete.
-* End-to-end RAG acceptance remains future work.
-* Hardware metrics depend on device support.
-* Unsupported hardware values must report unavailable.
-* AI availability depends on provider, account access, model availability, quota, and network.
-
-⸻
-
-Target Architecture Roadmap / 目标架构路线
+6. Roadmap / 路线图
 
 Some foundations already exist.
 
-The following phases describe the target completion state, not a claim that every listed capability is completely unimplemented.
+The following phases describe the target completion state rather than implying that every listed capability is completely unimplemented.
 
-部分基础能力目前已经存在。
-
-以下阶段描述的是 目标完成状态，并不代表其中所有内容均尚未实现。
+部分基础能力目前已经存在。以下阶段表示目标完成状态。
 
 ⸻
 
-Phase A — Core Foundation / 核心基础
+6.1 Phase A — Core Foundation / 核心基础
 
 Target completion includes:
 
@@ -781,7 +708,7 @@ Target completion includes:
 
 ⸻
 
-Phase B — Assistant Capabilities / 助手能力
+6.2 Phase B — Assistant Capabilities / 助手能力
 
 Target capabilities:
 
@@ -799,11 +726,11 @@ Target capabilities:
 * Privacy-bounded Screen Awareness
 * Bounded multi-step Agent Runtime
 
-The Agent Runtime is an escalation path, not the default path for every request.
+Agent Runtime is an escalation path, not the default routing path.
 
 ⸻
 
-Phase C — Proactive Assistant / 主动助手
+6.3 Phase C — Proactive Assistant / 主动助手
 
 Target capabilities:
 
@@ -818,9 +745,9 @@ Target capabilities:
 
 ⸻
 
-Out of Current Scope / 当前范围之外
+6.4 Out of Current Scope / 当前范围之外
 
-The following capabilities are not currently authorized roadmap work:
+The following are not currently part of the authorized implementation roadmap:
 
 * Camera Vision
 * Multi-device support
@@ -829,24 +756,13 @@ The following capabilities are not currently authorized roadmap work:
 * Smart-home control
 * Physical-environment awareness
 
-These capabilities require separate explicit authorization before entering the implementation roadmap.
-
-以下功能目前不属于已授权开发范围：
-
-* Camera Vision
-* 多设备支持
-* 手机 Companion
-* IoT
-* 智能家居控制
-* 物理环境感知
-
-在进入正式实现路线之前，必须重新取得明确授权。
+These require separate explicit authorization before entering implementation.
 
 ⸻
 
-Codex Handoff / Codex 工程升级
+6.5 Codex Handoff / Codex 工程升级
 
-Codex Handoff is different from the Codex App Server transport currently used for managed ChatGPT connectivity.
+Codex Handoff is separate from the current Codex App Server transport.
 
 Codex App Server Transport
 → AI connection transport
@@ -855,7 +771,7 @@ Codex Handoff
 → Engineering task escalation
 → Future controlled capability
 
-A future Codex Handoff may allow JARVIS to escalate authorized engineering tasks such as:
+Future Codex Handoff may support authorized tasks such as:
 
 Repository inspection
 Code modification
@@ -863,42 +779,47 @@ Testing
 Build operations
 Engineering diagnostics
 
-but only after explicit authorization and under bounded authority.
+under explicit authorization and bounded authority.
 
 ⸻
 
-Project Principles / 项目原则
+7. Contributing & License / 贡献与许可证
 
-JARVIS follows these engineering principles:
+7.1 Engineering Principles / 工程原则
+
+JARVIS follows these principles:
 
 1. One authority for every important concept.
-    每个重要概念只有一个权威来源。
 2. No silent fallback.
-    禁止静默兜底。
 3. No legacy compatibility by default.
-    默认不保留旧版兼容路径。
 4. Fail explicitly.
-    失败必须明确显示。
 5. Preserve truthful state.
-    保持真实执行状态。
 6. Security fails closed.
-    安全检查失败时拒绝执行。
 7. Use structured results.
-    使用结构化结果。
 8. Keep lifecycle transitions observable.
-    生命周期状态变化必须可观察。
 9. High cohesion, low coupling.
-    高内聚、低耦合。
 10. One-way dependencies.
-    保持单向依赖。
-11. Derived indexes are not authoritative.
-    派生索引不是权威数据源。
+11. Derived indexes are never authoritative.
 12. Every repository change is documented and verified.
-    每次 Repository 改动都必须记录并验证。
+
+对应中文：
+
+1. 每个重要概念只有一个权威来源。
+2. 禁止静默兜底。
+3. 默认不保留旧版兼容路径。
+4. 失败必须明确显示。
+5. 保持真实执行状态。
+6. 安全检查失败时拒绝执行。
+7. 使用结构化结果。
+8. 生命周期变化必须可观察。
+9. 高内聚、低耦合。
+10. 保持单向依赖。
+11. 派生索引不是权威来源。
+12. 每次 Repository 改动必须记录并验证。
 
 ⸻
 
-Contributing / 参与开发
+7.2 Contribution Workflow / 贡献流程
 
 Before modifying the repository:
 
@@ -906,36 +827,67 @@ Before modifying the repository:
 2. Read docs/INDEX.md
 3. Read relevant CURRENT_STATE documentation
 4. Read related change records
-5. Confirm the task scope
-6. Modify the smallest responsible module
-7. Update documentation
-8. Run relevant tests
-9. Inspect the final Git diff
+5. Confirm task scope
+6. Create a dedicated branch
+7. Modify the smallest responsible module
+8. Update documentation
+9. Run relevant tests
+10. Inspect final Git diff
+11. Open Pull Request
 
-Contributors should preserve:
-
-* authority boundaries
-* Core contracts
-* explicit failure states
-* security policy
-* platform isolation
-* documentation consistency
-
-Platform-specific functionality should not leak into Core contracts unless the capability is genuinely cross-platform.
-
-For platform adapters, contributors should normally work in dedicated branches such as:
+Recommended branch naming:
 
 adapter/macos-system
 adapter/macos-audio
 adapter/linux-system
 feature/wake-word
+feature/automation-engine
 fix/core-session-lock
+fix/provider-state
 
-Platform-specific implementations should remain isolated from shared Core logic whenever possible.
+Platform-specific implementations should remain inside the relevant platform adapter whenever possible.
+
+Shared Core contracts should only be modified when the capability is genuinely cross-platform.
 
 ⸻
 
-License / 许可证
+7.3 Platform Adapter Direction / 平台 Adapter 方向
+
+Recommended structure:
+
+JARVIS
+├─ core/
+│  ├─ routing/
+│  ├─ permissions/
+│  ├─ tasks/
+│  └─ contracts/
+│
+├─ platform/
+│  ├─ windows/
+│  ├─ macos/
+│  └─ linux/
+│
+├─ tools/
+├─ storage/
+├─ knowledge/
+└─ desktop/
+
+Example:
+
+Core request:
+system.volume.set(50)
+Windows:
+platform/windows/audio
+macOS:
+platform/macos/audio
+Linux:
+platform/linux/audio
+
+The Core should depend on a capability contract, not on a specific operating-system implementation.
+
+⸻
+
+7.4 License / 许可证
 
 JARVIS is licensed under the Apache License 2.0.
 
@@ -943,7 +895,7 @@ Third-party dependencies retain their own licenses, copyright notices, and attri
 
 JARVIS 使用 Apache License 2.0。
 
-所有第三方组件继续遵守各自的许可证、版权声明与 attribution 要求。
+所有第三方组件继续遵守各自许可证、版权声明和 attribution 要求。
 
 ⸻
 
@@ -951,12 +903,12 @@ Development Status Notice / 开发状态说明
 
 JARVIS is under active development.
 
-Current screenshots, hardware values, response times, UI surfaces, and implementation details may change.
+Screenshots, hardware values, response times, UI surfaces and implementation details may change.
 
-Any displayed hardware metrics or response times are examples from a specific development environment and must not be interpreted as performance benchmarks.
+Displayed hardware metrics or response times represent individual development environments and must not be interpreted as formal performance benchmarks.
 
 JARVIS 目前仍处于持续开发阶段。
 
-截图、硬件数值、响应时间、UI 页面以及部分实现细节都可能继续变化。
+截图、硬件数值、响应时间、UI 页面以及实现细节都可能继续变化。
 
-开发阶段展示的硬件数据与响应时间仅代表当次运行环境，不应视为正式性能基准。
+开发阶段展示的数据仅代表对应运行环境，不应视为正式性能基准。
